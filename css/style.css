@@ -59,6 +59,8 @@ html, body {
   font-size: 14px;
   user-select: none;
   -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 
 /* ── Layout ── */
@@ -80,9 +82,9 @@ html, body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  height: 100%;
+  min-height: 100%;
   gap: 24px;
-  padding: 40px;
+  padding: 40px 24px;
   text-align: center;
 }
 
@@ -1486,14 +1488,145 @@ html, body {
 .shop-item:nth-child(4) { animation-delay: 0.4s; }
 .shop-item:nth-child(5) { animation-delay: 0.5s; }
 
+/* ── Gold reward animation (page result) ── */
+.gold-reward-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 250;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10, 8, 6, 0.7);
+  animation: fadeIn 0.2s ease-out;
+}
+
+.gold-reward-card {
+  background: var(--bg-card);
+  border: 2px solid var(--amber-dim);
+  border-radius: 12px;
+  padding: 24px 32px;
+  max-width: 340px;
+  width: 90%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+.gold-reward-title {
+  font-family: 'Crimson Text', serif;
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--amber);
+  opacity: 0;
+}
+
+.gold-reward-title.shown {
+  animation: introFadeUp 0.4s ease-out forwards;
+}
+
+.gold-reward-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-family: 'Crimson Text', serif;
+  font-size: 16px;
+  opacity: 0;
+}
+
+.gold-reward-row.shown {
+  animation: charmEntryReveal 0.35s ease-out forwards;
+}
+
+.gold-reward-row .reward-label {
+  color: var(--cream-dim);
+}
+
+.gold-reward-row .reward-value {
+  font-weight: 700;
+  color: var(--gold);
+  font-size: 20px;
+}
+
+.gold-reward-total {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 8px 12px;
+  border-top: 1px solid var(--amber-dim);
+  font-family: 'Crimson Text', serif;
+  opacity: 0;
+}
+
+.gold-reward-total.shown {
+  animation: finalScoreSlam 0.5s cubic-bezier(0.2, 0, 0.3, 1) forwards;
+}
+
+.gold-reward-total .reward-label {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--cream);
+}
+
+.gold-reward-total .reward-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--gold);
+  text-shadow: 0 0 15px rgba(255, 215, 0, 0.4);
+}
+
 /* ── Responsive ── */
-@media (max-width: 400px) {
+@media (max-width: 500px) {
+  #title-screen {
+    padding: 24px 20px;
+    gap: 18px;
+    justify-content: center;
+  }
+  #title-screen h1 {
+    font-size: 40px;
+    letter-spacing: 4px;
+  }
+  #title-screen .subtitle {
+    font-size: 16px;
+    margin-top: -8px;
+  }
+  #title-screen .tagline {
+    font-size: 12px;
+  }
+  .btn {
+    padding: 10px 28px;
+    font-size: 16px;
+  }
   .grid-container {
-    max-width: 280px;
+    max-width: 300px;
     gap: 6px;
+    padding: 10px;
+  }
+  .die-cell .die-letter { font-size: 24px; }
+  .score-current { font-size: 24px; }
+  .header-bar { padding: 6px 10px; }
+  .floor-name { font-size: 14px; }
+  .scoring-card { padding: 16px 20px; }
+  .scoring-tile .tile-letter { width: 36px; height: 36px; font-size: 18px; }
+  .floor-intro .floor-title { font-size: 28px; }
+  .floor-intro .floor-intro-text { font-size: 14px; }
+  .floor-intro .floor-opening-line { font-size: 15px; padding: 12px 16px; }
+}
+
+@media (max-width: 360px) {
+  #title-screen h1 {
+    font-size: 32px;
+    letter-spacing: 3px;
+  }
+  .grid-container {
+    max-width: 260px;
+    gap: 5px;
     padding: 8px;
   }
-  .die-cell .die-letter { font-size: 22px; }
-  .score-current { font-size: 22px; }
-  #title-screen h1 { font-size: 44px; letter-spacing: 4px; }
+  .die-cell .die-letter { font-size: 20px; }
+  .scoring-tile .tile-letter { width: 30px; height: 30px; font-size: 16px; }
 }

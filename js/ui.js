@@ -98,7 +98,7 @@ function render() {
   shopScreen.style.display = 'none';
 
   // Clear overlays & intros
-  document.querySelectorAll('.overlay, .floor-intro, .twist-reveal, .page-turn').forEach(el => el.remove());
+  document.querySelectorAll('.overlay, .gold-reward-overlay, .floor-intro, .twist-reveal, .page-turn').forEach(el => el.remove());
 
   switch (state.phase) {
     case 'title':
@@ -847,20 +847,75 @@ function showPageResult() {
   const r = state.pageResult;
   const floorInfo = Game.getFloorInfo(state);
   const isFloorComplete = state.page === 2;
+  const narratorText = isFloorComplete ? pick(Game.NARRATOR.floorCleared) : pick(Game.NARRATOR.pageCleared);
 
   const div = document.createElement('div');
-  div.className = 'overlay';
+  div.className = 'gold-reward-overlay';
   div.innerHTML = `
-    <div class="overlay-card">
-      <h2>${isFloorComplete ? 'Floor Complete!' : 'Page Complete!'}</h2>
-      ${isFloorComplete ? `<p style="color: var(--cream-dim); font-style: italic; font-family: 'Crimson Text', serif;">${pick(Game.NARRATOR.floorCleared)}</p>` : ''}
-      <div class="result-score">${r.roundScore}</div>
-      <div class="result-target">Target: ${r.target}</div>
-      <div class="gold-earned">+${r.totalGold} gold (${r.baseGold} base + ${r.bonusGold} unused bonus)</div>
-      <button class="btn btn-gold" onclick="proceedFromResult()">Continue</button>
+    <div class="gold-reward-card">
+      <div class="gold-reward-title" id="gr-title">${isFloorComplete ? 'Floor Complete!' : 'Page Complete!'}</div>
+      <div class="gold-reward-row" id="gr-score">
+        <span class="reward-label">Score</span>
+        <span class="reward-value" style="color: var(--cream);">${r.roundScore} / ${r.target}</span>
+      </div>
+      <div class="gold-reward-row" id="gr-base">
+        <span class="reward-label">Page reward</span>
+        <span class="reward-value">+${r.baseGold}</span>
+      </div>
+      <div class="gold-reward-row" id="gr-bonus">
+        <span class="reward-label">${r.bonusGold / 2} unused submission${r.bonusGold / 2 !== 1 ? 's' : ''} × 2</span>
+        <span class="reward-value">+${r.bonusGold}</span>
+      </div>
+      <div class="gold-reward-total" id="gr-total">
+        <span class="reward-label">Gold earned</span>
+        <span class="reward-value">+${r.totalGold}</span>
+      </div>
+      <div style="opacity:0; font-family: 'Crimson Text', serif; font-style: italic; color: var(--cream-dim); font-size: 13px; text-align: center;" id="gr-narrate">${narratorText}</div>
+      <button class="btn btn-gold" style="opacity:0;" id="gr-continue" onclick="proceedFromResult()">Continue</button>
     </div>
   `;
   document.getElementById('app').appendChild(div);
+
+  // Animate the rows stepping in
+  let t = 200;
+  const step = 350;
+
+  setTimeout(() => {
+    const el = document.getElementById('gr-title');
+    if (el) el.classList.add('shown');
+  }, t);
+
+  t += step;
+  setTimeout(() => {
+    const el = document.getElementById('gr-score');
+    if (el) el.classList.add('shown');
+  }, t);
+
+  t += step;
+  setTimeout(() => {
+    const el = document.getElementById('gr-base');
+    if (el) el.classList.add('shown');
+  }, t);
+
+  t += step;
+  setTimeout(() => {
+    const el = document.getElementById('gr-bonus');
+    if (el) el.classList.add('shown');
+  }, t);
+
+  t += step + 100;
+  setTimeout(() => {
+    const el = document.getElementById('gr-total');
+    if (el) el.classList.add('shown');
+  }, t);
+
+  t += 500;
+  setTimeout(() => {
+    const el = document.getElementById('gr-narrate');
+    if (el) { el.style.transition = 'opacity 0.5s'; el.style.opacity = '1'; }
+    const btn = document.getElementById('gr-continue');
+    if (btn) { btn.style.transition = 'opacity 0.4s'; btn.style.opacity = '1'; }
+  }, t);
 }
 
 function proceedFromResult() {
