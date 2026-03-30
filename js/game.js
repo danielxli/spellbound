@@ -192,36 +192,53 @@ function detectPatterns(word) {
 
 // ── Scoring ──
 function scoreWord(word, cells, gameState) {
-  const { LETTER_CHIPS, getWordLengthMult } = window.GameDice;
+  const { LETTER_CHIPS, LETTER_TIERS, getWordLengthMult } = window.GameDice;
 
-  // Base chips from letters
-  let baseChips = 0;
-  for (const cell of cells) {
-    baseChips += LETTER_CHIPS[cell.letter] || 2;
-    baseChips += cell.die.bonusChips || 0;
-  }
+  // Per-letter chip breakdown
+  const letterDetails = cells.map(cell => {
+    const base = LETTER_CHIPS[cell.letter] || 2;
+    const dieBonus = cell.die.bonusChips || 0;
+    const dieMult = cell.die.bonusMult || 0;
+    return {
+      letter: cell.letter === 'QU' ? 'Qu' : cell.letter,
+      chips: base + dieBonus,
+      baseChips: base,
+      dieBonus,
+      dieMult,
+      tier: LETTER_TIERS[cell.letter] || 'common'
+    };
+  });
 
-  // Base mult from word length
+  let baseChips = letterDetails.reduce((s, l) => s + l.chips, 0);
   let baseMult = getWordLengthMult(word.length);
 
-  // Build charm context
+  // Build charm context — track each charm's contribution
   const ctx = {
-    word,
-    cells,
+    word, cells,
     wordIndex: gameState.wordsThisRound.length,
-    bonusChips: 0,
-    bonusMult: 0,
-    multMultiplier: 1,
-    bonusGold: 0,
+    bonusChips: 0, bonusMult: 0, multMultiplier: 1, bonusGold: 0,
     uniqueStarts: new Set(gameState.wordsThisRound.map(w => w[0]).concat(word[0])).size,
     prevWordLength: gameState.wordsThisRound.length > 0 ? gameState.wordsThisRound[gameState.wordsThisRound.length - 1].length : 0,
     isLastWord: gameState.submissionsLeft <= 1,
     allWordsLong: gameState.wordsThisRound.every(w => w.length >= 5) && word.length >= 5
   };
 
-  // Apply charm effects
+  const charmTriggers = []; // { name, desc, chipDelta, multDelta, multMultDelta }
   for (const charm of gameState.charms) {
+    const before = { chips: ctx.bonusChips, mult: ctx.bonusMult, mm: ctx.multMultiplier, gold: ctx.bonusGold };
     charm.effect(ctx);
+    const chipDelta = ctx.bonusChips - before.chips;
+    const multDelta = ctx.bonusMult - before.mult;
+    const multMultDelta = ctx.multMultiplier / before.mm; // ratio, e.g. 3 means ×3
+    const goldDelta = ctx.bonusGold - before.gold;
+    if (chipDelta !== 0 || multDelta !== 0 || multMultDelta !== 1 || goldDelta !== 0) {
+      charmTriggers.push({
+        name: charm.name, rarity: charm.rarity,
+        chipDelta, multDelta,
+        multMultDelta: multMultDelta !== 1 ? multMultDelta : 0,
+        goldDelta
+      });
+    }
   }
 
   // Die-based bonus mult
@@ -235,16 +252,14 @@ function scoreWord(word, cells, gameState) {
   const score = Math.floor(totalChips * totalMult);
 
   return {
-    word,
-    baseChips,
-    baseMult,
+    word, letterDetails,
+    baseChips, baseMult,
     bonusChips: ctx.bonusChips,
     bonusMult: ctx.bonusMult + dieBonusMult,
     multMultiplier: ctx.multMultiplier,
-    totalChips,
-    totalMult,
-    score,
+    totalChips, totalMult, score,
     bonusGold: ctx.bonusGold,
+    charmTriggers,
     patterns: detectPatterns(word)
   };
 }

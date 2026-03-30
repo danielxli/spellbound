@@ -27,9 +27,14 @@ async function init() {
 }
 
 function handleKeydown(e) {
-  if (state.phase === 'playing') {
+  if (state.phase === 'playing' && !scoringAnimationActive) {
     if (e.key === 'Enter') doSubmitWord();
     else if (e.key === 'Escape' || e.key === 'Backspace') clearSelection();
+  }
+  // Space/Enter/Escape to skip scoring animation
+  if (scoringAnimationActive && (e.key === ' ' || e.key === 'Enter' || e.key === 'Escape')) {
+    const overlay = document.querySelector('.scoring-overlay');
+    if (overlay) overlay.click();
   }
 }
 
@@ -532,11 +537,13 @@ function doShakeGrid() {
   renderGame();
 }
 
-// ── Submit Word — with animations and narrator ──
-function doSubmitWord() {
-  if (state.selectedCells.length < 3) return;
+// ── Submit Word — with step-by-step scoring animation ──
+let scoringAnimationActive = false;
 
-  // Snapshot the used cell positions BEFORE submit (which clears them)
+function doSubmitWord() {
+  if (state.selectedCells.length < 3 || scoringAnimationActive) return;
+
+  // Snapshot used cell positions BEFORE submit clears them
   const usedPositions = new Set(state.selectedCells.map(c => `${c.row},${c.col}`));
 
   const result = Game.submitWord(state);
@@ -549,49 +556,192 @@ function doSubmitWord() {
   if (!state.wordHistory) state.wordHistory = [];
   state.wordHistory.push(result.result);
 
-  // Set rerolled positions for animation
+  // Set rerolled positions for dice animation after scoring completes
   rerolledPositions = usedPositions;
 
-  // Show enhanced score popup
-  showScorePopup(result.result);
+  // Block input and run the scoring animation
+  scoringAnimationActive = true;
+  runScoringAnimation(result.result).then(() => {
+    scoringAnimationActive = false;
 
-  // Screen shake for big scores
-  if (result.result.score >= 150) {
-    triggerScreenShake();
-  }
+    // Screen shake for big scores
+    if (result.result.score >= 150) triggerScreenShake();
 
-  // Narrator reaction
-  narrateWordReaction(result.result);
+    // Narrator
+    narrateWordReaction(result.result);
 
-  // Flash charms that triggered
-  const triggeredCharms = detectTriggeredCharms(result.result);
-  if (triggeredCharms.length > 0) {
-    setTimeout(() => flashCharms(triggeredCharms), 200);
-  }
+    // Check if round is over
+    if (state.submissionsLeft <= 0) {
+      setTimeout(() => finishRound(), 600);
+    }
 
-  // Check if round is over
-  if (state.submissionsLeft <= 0) {
-    setTimeout(() => finishRound(), 1000);
-  }
-
-  renderGame();
+    renderGame();
+  });
 }
 
-// Detect which charms contributed to this score
-function detectTriggeredCharms(result) {
-  const triggered = [];
-  for (const charm of state.charms) {
-    const word = result.word;
-    if (charm.id === 'rough_draft' && state.wordsThisRound.length === 1) triggered.push(charm.id);
-    if (charm.id === 'reading_glasses' && 'AEIOU'.split('').some(v => word.includes(v))) triggered.push(charm.id);
-    if (charm.id === 'double_vision' && Game.hasDoubleLetter(word)) triggered.push(charm.id);
-    if (charm.id === 'thesaurus' && word.length >= 6) triggered.push(charm.id);
-    if (charm.id === 'bookend_clasp' && Game.isBookend(word)) triggered.push(charm.id);
-    if (charm.id === 'inkpot') triggered.push(charm.id);
-    if (charm.id === 'consonant_crunch' && Game.hasConsonantRun(word)) triggered.push(charm.id);
-    if (charm.id === 'synonym_ribbon' && result.bonusChips >= 15) triggered.push(charm.id);
-  }
-  return triggered;
+// ── Step-by-step scoring animation (Balatro-style) ──
+function runScoringAnimation(result) {
+  return new Promise(resolve => {
+    const overlay = document.createElement('div');
+    overlay.className = 'scoring-overlay';
+
+    const letters = result.letterDetails;
+    const hasCharms = result.charmTriggers.length > 0;
+    const hasPatterns = result.patterns.length > 0;
+
+    overlay.innerHTML = `
+      <div class="scoring-card">
+        <div class="scoring-letters">
+          ${letters.map((l, i) => `
+            <div class="scoring-tile" id="stile-${i}">
+              <div class="tile-letter tier-${l.tier}">${l.letter}</div>
+              <div class="tile-chips" id="schip-${i}">+${l.chips}</div>
+            </div>
+          `).join('')}
+        </div>
+        <div class="scoring-length-mult" id="slength">
+          ${result.word.length} letters → ×${result.baseMult} base mult
+        </div>
+        <div class="scoring-totals">
+          <span class="scoring-chips-total" id="schips-total">0</span>
+          <span class="scoring-x">×</span>
+          <span class="scoring-mult-total" id="smult-total">${result.baseMult}</span>
+        </div>
+        <div class="scoring-charms" id="scharms"></div>
+        <div class="scoring-patterns" id="spatterns">
+          ${result.patterns.map(p => `<span class="pattern-badge">${p}</span>`).join('')}
+        </div>
+        <div class="scoring-final" id="sfinal">+${result.score}</div>
+      </div>
+    `;
+
+    document.getElementById('app').appendChild(overlay);
+
+    // Animation timeline
+    const LETTER_DELAY = 120; // ms between each letter
+    const CHARM_DELAY = 300;  // ms between each charm
+    let t = 200; // start delay
+
+    let runningChips = 0;
+    const multEl = () => document.getElementById('smult-total');
+    const chipsEl = () => document.getElementById('schips-total');
+
+    // Step 1: Reveal letters one by one, accumulating chips
+    letters.forEach((l, i) => {
+      setTimeout(() => {
+        const tile = document.getElementById(`stile-${i}`);
+        const chip = document.getElementById(`schip-${i}`);
+        if (tile) tile.classList.add('revealed');
+        setTimeout(() => {
+          if (chip) chip.classList.add('shown');
+          runningChips += l.chips;
+          const cel = chipsEl();
+          if (cel) {
+            cel.textContent = runningChips;
+            cel.classList.remove('bump');
+            void cel.offsetWidth; // force reflow
+            cel.classList.add('bump');
+          }
+        }, 100);
+      }, t + i * LETTER_DELAY);
+    });
+
+    t += letters.length * LETTER_DELAY + 200;
+
+    // Step 2: Show length mult
+    setTimeout(() => {
+      const el = document.getElementById('slength');
+      if (el) el.classList.add('shown');
+    }, t);
+
+    t += 300;
+
+    // Step 3: Show charm triggers one by one, updating totals
+    let currentBonusChips = 0;
+    let currentBonusMult = 0;
+    let currentMultMult = 1;
+
+    result.charmTriggers.forEach((charm, i) => {
+      setTimeout(() => {
+        const charmsDiv = document.getElementById('scharms');
+        if (!charmsDiv) return;
+
+        // Build effect text
+        const effects = [];
+        if (charm.chipDelta > 0) effects.push(`<span class="charm-entry-effect chips-effect">+${charm.chipDelta} chips</span>`);
+        if (charm.chipDelta < 0) effects.push(`<span class="charm-entry-effect chips-effect">${charm.chipDelta} chips</span>`);
+        if (charm.multDelta > 0) effects.push(`<span class="charm-entry-effect mult-effect">+${charm.multDelta} mult</span>`);
+        if (charm.multMultDelta > 0) effects.push(`<span class="charm-entry-effect mult-effect">×${charm.multMultDelta} mult</span>`);
+        if (charm.goldDelta > 0) effects.push(`<span class="charm-entry-effect gold-effect">+${charm.goldDelta} gold</span>`);
+
+        const entry = document.createElement('div');
+        entry.className = 'scoring-charm-entry';
+        entry.innerHTML = `
+          <span class="charm-entry-name">${charm.name}</span>
+          <span>${effects.join(' ')}</span>
+        `;
+        charmsDiv.appendChild(entry);
+
+        // Trigger animation
+        requestAnimationFrame(() => entry.classList.add('shown'));
+
+        // Update running totals
+        currentBonusChips += charm.chipDelta;
+        currentBonusMult += charm.multDelta;
+        if (charm.multMultDelta > 0) currentMultMult *= charm.multMultDelta;
+
+        const cel = chipsEl();
+        if (cel && charm.chipDelta !== 0) {
+          cel.textContent = result.baseChips + currentBonusChips;
+          cel.classList.remove('bump');
+          void cel.offsetWidth;
+          cel.classList.add('bump');
+        }
+
+        const mel = multEl();
+        if (mel && (charm.multDelta !== 0 || charm.multMultDelta > 0)) {
+          const currentMult = (result.baseMult + currentBonusMult) * currentMultMult;
+          mel.textContent = currentMult % 1 === 0 ? currentMult : currentMult.toFixed(1);
+          mel.classList.remove('bump');
+          void mel.offsetWidth;
+          mel.classList.add('bump');
+        }
+      }, t + i * CHARM_DELAY);
+    });
+
+    t += result.charmTriggers.length * CHARM_DELAY + 200;
+
+    // Step 4: Show patterns
+    if (hasPatterns) {
+      setTimeout(() => {
+        const el = document.getElementById('spatterns');
+        if (el) el.classList.add('shown');
+      }, t);
+      t += 200;
+    }
+
+    // Step 5: Final score slam
+    setTimeout(() => {
+      const el = document.getElementById('sfinal');
+      if (el) el.classList.add('shown');
+    }, t);
+
+    t += 400;
+
+    // Step 6: Dismiss
+    const totalDuration = t + 500;
+    setTimeout(() => {
+      overlay.style.transition = 'opacity 0.3s';
+      overlay.style.opacity = '0';
+      setTimeout(() => { overlay.remove(); resolve(); }, 300);
+    }, totalDuration);
+
+    // Also allow click to skip
+    overlay.addEventListener('click', () => {
+      overlay.remove();
+      resolve();
+    });
+  });
 }
 
 function endRoundEarly() {
@@ -888,27 +1038,7 @@ function goToTitle() {
 }
 
 // ── Enhanced Score Popup ──
-function showScorePopup(result) {
-  const div = document.createElement('div');
-  div.className = 'score-popup';
-
-  const patternBadges = result.patterns.length > 0
-    ? `<div class="pattern-badges">${result.patterns.map(p => `<span class="pattern-badge">${p}</span>`).join('')}</div>`
-    : '';
-
-  const charmText = result.bonusChips > 0 || result.bonusMult > 0
-    ? `<div class="charm-triggers">+${result.bonusChips} chips, +${result.bonusMult.toFixed(1)} mult from charms</div>`
-    : '';
-
-  div.innerHTML = `
-    <div class="score-value">+${result.score}</div>
-    <div class="score-breakdown">${result.totalChips} chips × ${result.totalMult.toFixed(1)} mult</div>
-    ${charmText}
-    ${patternBadges}
-  `;
-  document.getElementById('app').appendChild(div);
-  setTimeout(() => div.remove(), 900);
-}
+// showScorePopup replaced by runScoringAnimation
 
 // ── Toast messages ──
 function showToast(msg) {
