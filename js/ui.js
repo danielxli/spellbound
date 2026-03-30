@@ -405,17 +405,48 @@ function renderActions() {
   const el = document.getElementById('actions-row');
   const word = state.selectedCells.map(c => c.isWild ? (c.wildLetter || '★') : c.letter).join('');
   const isValid = word.length >= 3 && GameDictionary.isValidWord(word);
-  const target = Game.getTarget(state);
-  const hasWords = state.wordsThisRound.length > 0;
-  const meetsTarget = state.roundScore >= target;
   const canShake = state.submissionsLeft > 0;
 
   el.innerHTML = `
     <button class="btn btn-small ${state.selectedCells.length === 0 ? 'btn-disabled' : 'btn-red'}" onclick="clearSelection()">Clear</button>
     <button class="btn btn-small btn-gold ${!isValid ? 'btn-disabled' : ''}" onclick="doSubmitWord()">Submit</button>
     <button class="btn btn-small ${!canShake ? 'btn-disabled' : ''}" onclick="doShakeGrid()" title="Re-roll the entire grid (costs 1 submission)">Shake</button>
-    <button class="btn btn-small ${!hasWords || !meetsTarget ? 'btn-disabled' : ''}" onclick="endRoundEarly()">Finish</button>
   `;
+
+  renderFinishButton();
+}
+
+function renderFinishButton() {
+  const el = document.getElementById('finish-row');
+  const target = Game.getTarget(state);
+  const hasWords = state.wordsThisRound.length > 0;
+  const meetsTarget = state.roundScore >= target;
+  const active = hasWords && meetsTarget;
+
+  if (!active) {
+    el.innerHTML = '';
+    el.className = 'finish-row';
+    return;
+  }
+
+  // Only set content if not already showing (avoid re-triggering animation)
+  if (!el.querySelector('.finish-btn')) {
+    const bonus = state.submissionsLeft * 2;
+    el.innerHTML = `
+      <button class="finish-btn" onclick="endRoundEarly()">
+        <span class="finish-label">Finish Page</span>
+        <span class="finish-bonus">+${bonus} bonus gold for ${state.submissionsLeft} unused submission${state.submissionsLeft !== 1 ? 's' : ''}</span>
+      </button>
+    `;
+    el.className = 'finish-row active';
+  } else {
+    // Update bonus text in case submissions changed
+    const bonusEl = el.querySelector('.finish-bonus');
+    if (bonusEl) {
+      const bonus = state.submissionsLeft * 2;
+      bonusEl.textContent = `+${bonus} bonus gold for ${state.submissionsLeft} unused submission${state.submissionsLeft !== 1 ? 's' : ''}`;
+    }
+  }
 }
 
 function renderWordHistory() {

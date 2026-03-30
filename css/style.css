@@ -516,6 +516,98 @@ html, body {
   text-align: center;
 }
 
+/* ── Finish Page button ── */
+.finish-row {
+  width: 100%;
+  max-width: 320px;
+  min-height: 0;
+}
+
+.finish-row .finish-btn {
+  display: none;
+}
+
+.finish-row.active .finish-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  width: 100%;
+  padding: 10px 16px;
+  border: 2px solid var(--green);
+  border-radius: 8px;
+  background: rgba(74, 154, 74, 0.08);
+  cursor: pointer;
+  transition: all 0.2s;
+  animation: finishAppear 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  position: relative;
+  overflow: hidden;
+}
+
+.finish-row.active .finish-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(74, 154, 74, 0.12) 40%,
+    rgba(74, 154, 74, 0.12) 60%,
+    transparent 100%
+  );
+  animation: finishShimmer 2s ease-in-out infinite;
+}
+
+@keyframes finishShimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+@keyframes finishAppear {
+  0% {
+    opacity: 0;
+    transform: translateY(8px) scale(0.95);
+    border-color: transparent;
+    box-shadow: none;
+  }
+  50% {
+    border-color: var(--green-light);
+    box-shadow: 0 0 20px rgba(74, 154, 74, 0.3);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    border-color: var(--green);
+    box-shadow: 0 0 12px rgba(74, 154, 74, 0.15);
+  }
+}
+
+.finish-row.active .finish-btn:hover {
+  background: rgba(74, 154, 74, 0.15);
+  border-color: var(--green-light);
+  box-shadow: 0 0 20px rgba(74, 154, 74, 0.25);
+  transform: translateY(-1px);
+}
+
+.finish-row.active .finish-btn:active {
+  transform: scale(0.98);
+}
+
+.finish-btn .finish-label {
+  font-family: 'Crimson Text', serif;
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--green-light);
+  letter-spacing: 0.5px;
+  position: relative;
+}
+
+.finish-btn .finish-bonus {
+  font-size: 11px;
+  color: var(--gold-dim);
+  position: relative;
+}
+
 /* ── Word history ── */
 .word-history {
   width: 100%;
