@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Spellbound — The Endless Library</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📖</text></svg>">
+</head>
+<body>
+  <div id="app">
+
+    <!-- ═══ Title Screen ═══ -->
+    <div id="title-screen">
+      <h1>Spellbound</h1>
+      <div class="subtitle">The Endless Library</div>
+      <div class="tagline">
+        Roll letter dice. Trace words. Build your engine.<br>
+        Climb the floors before your story falls apart.
+      </div>
+      <button class="btn btn-gold" onclick="startGame()">Begin Writing</button>
+      <div style="color: var(--text-dark); font-size: 11px; margin-top: 8px;">
+        Playing as The Novelist — 5 submissions per round, no timer
+      </div>
+    </div>
+
+    <!-- ═══ Game Screen ═══ -->
+    <div id="game-screen">
+
+      <!-- Header -->
+      <div class="header-bar">
+        <div class="floor-info">
+          <div id="floor-name" class="floor-name"></div>
+          <div id="floor-genre" class="floor-genre"></div>
+        </div>
+        <div class="page-info">
+          <div id="page-name" class="page-name"></div>
+          <div id="gold-display" class="gold-display"></div>
+        </div>
+      </div>
+
+      <!-- Score bar -->
+      <div class="score-bar">
+        <div class="score-row">
+          <div id="score-current" class="score-current">0</div>
+          <div id="score-target" class="score-target">Target: <span>100</span></div>
+        </div>
+        <div class="progress-bar">
+          <div id="progress-fill" class="progress-fill" style="width: 0%"></div>
+        </div>
+        <div class="submissions-info">
+          <span id="submissions-left">5 submissions left</span>
+        </div>
+      </div>
+
+      <!-- Story Twist banner -->
+      <div id="twist-banner" class="twist-banner" style="display:none;"></div>
+
+      <!-- Charms display -->
+      <div id="charms-bar" class="charms-bar"></div>
+
+      <!-- Current word -->
+      <div id="word-display" class="word-display">
+        <span class="placeholder">Trace adjacent letters to form a word...</span>
+      </div>
+
+      <!-- 4x4 Grid -->
+      <div id="grid-container" class="grid-container"></div>
+
+      <!-- Actions -->
+      <div id="actions-row" class="actions-row"></div>
+
+      <!-- Ink cards -->
+      <div id="ink-cards-bar" class="ink-cards-bar"></div>
+
+      <!-- Skip page -->
+      <div id="skip-row" class="skip-row"></div>
+
+      <!-- Narrator -->
+      <div id="narrator-bar" class="narrator-bar"></div>
+
+      <!-- Word history -->
+      <div id="word-history" class="word-history"></div>
+
+    </div>
+
+    <!-- ═══ Shop Screen ═══ -->
+    <div id="shop-screen">
+      <div class="shop-header">
+        <h2 id="shop-title"></h2>
+        <div id="shop-floor-info" style="font-size: 12px; color: var(--text-dim);"></div>
+        <div id="shop-gold" class="shop-gold"></div>
+      </div>
+      <div id="shop-items" class="shop-items"></div>
+      <div id="shop-charms" class="charms-section"></div>
+      <button class="btn btn-gold" onclick="leaveShop()">Continue to Next Page</button>
+    </div>
+
+  </div>
+
+  <script src="js/dictionary.js"></script>
+  <script src="js/dice.js"></script>
+  <script src="js/game.js"></script>
+  <script src="js/ui.js"></script>
+</body>
+</html>
