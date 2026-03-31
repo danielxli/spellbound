@@ -173,6 +173,26 @@ const ALL_CHARMS = [
   { id: 'crescendo', name: 'Crescendo', flavor: 'Building to something magnificent.', rarity: 'rare', cost: 8,
     desc: 'Each word this round gains +2 mult more than the last.',
     effect: (ctx) => { ctx.bonusMult += ctx.wordIndex * 2; } },
+  // Scaling — get stronger or weaker over the run
+  { id: 'beginners_luck', name: "Beginner's Luck", flavor: 'Every writer starts somewhere.', rarity: 'common', cost: 2,
+    desc: 'x3 mult, but loses x1 each floor you clear.',
+    scaling: true,
+    effect: (ctx) => {
+      const power = Math.max(0, 3 - ctx.floorsCleared);
+      if (power > 0) ctx.multMultiplier *= power;
+    } },
+  { id: 'wordsmith', name: 'Wordsmith', flavor: 'Practice makes perfect.', rarity: 'uncommon', cost: 5,
+    desc: '+1 mult for every 6+ letter word played this run.',
+    scaling: true,
+    effect: (ctx) => { ctx.bonusMult += ctx.longWordCount; } },
+  { id: 'ink_well', name: 'Ink Well', flavor: 'Fed by the beauty of language.', rarity: 'uncommon', cost: 5,
+    desc: '+1 mult for every 5 word patterns triggered this run.',
+    scaling: true,
+    effect: (ctx) => { ctx.bonusMult += Math.floor(ctx.patternCount / 5); } },
+  { id: 'vocabulary', name: 'Vocabulary', flavor: 'A broad command of the alphabet.', rarity: 'rare', cost: 7,
+    desc: '+1 mult for every 5 unique letters used this run.',
+    scaling: true,
+    effect: (ctx) => { ctx.bonusMult += Math.floor(ctx.usedLetters / 5); } },
   // Legendary — game-changers
   { id: 'masterwork', name: 'The Masterwork', flavor: 'Only for those who demand perfection.', rarity: 'legendary', cost: 10,
     desc: 'If every word this round is 5+ letters, gain x5 mult on the last word.',
@@ -260,7 +280,12 @@ function scoreWord(word, cells, gameState) {
     uniqueStarts: new Set(gameState.wordsThisRound.map(w => w[0]).concat(word[0])).size,
     prevWordLength: gameState.wordsThisRound.length > 0 ? gameState.wordsThisRound[gameState.wordsThisRound.length - 1].length : 0,
     isLastWord: gameState.submissionsLeft <= 1,
-    allWordsLong: gameState.wordsThisRound.every(w => w.length >= 5) && word.length >= 5
+    allWordsLong: gameState.wordsThisRound.every(w => w.length >= 5) && word.length >= 5,
+    // Run-level stats for scaling charms
+    floorsCleared: gameState.floorsCleared,
+    longWordCount: gameState.longWordCount,
+    patternCount: gameState.patternCount,
+    usedLetters: gameState.usedLetters.size
   };
 
   const charmTriggers = []; // { name, desc, chipDelta, multDelta, multMultDelta }
@@ -315,7 +340,10 @@ function createGameState() {
     page: 0,           // 0=opening, 1=rising, 2=final
     gold: 0,
     runScore: 0,
-    usedWords: new Set(), // all words used this run (for The Sequel twist)
+    usedWords: new Set(),    // all words used this run
+    usedLetters: new Set(),  // all unique letters used this run
+    patternCount: 0,         // total pattern triggers this run
+    longWordCount: 0,        // total 6+ letter words this run
 
     // Round state
     grid: null,
@@ -448,6 +476,11 @@ function submitWord(state) {
   // Stats
   if (word.length > state.longestWord.length) state.longestWord = word;
   if (result.score > state.bestWordScore) state.bestWordScore = result.score;
+
+  // Track scaling charm stats
+  for (const ch of word) state.usedLetters.add(ch);
+  if (word.length >= 6) state.longWordCount++;
+  state.patternCount += result.patterns.length;
 
   // Re-roll used dice
   const cellPositions = cells.map(c => ({ row: c.row, col: c.col }));
@@ -648,6 +681,16 @@ function getDieUpgradeLevel(die) {
   return Math.round((die.bonusChips || 0) / DIE_UPGRADE_CHIPS);
 }
 
+// Sell a charm — get half its cost back (rounded up), free the slot
+function sellCharm(state, charmIndex) {
+  const charm = state.charms[charmIndex];
+  if (!charm) return null;
+  const refund = Math.ceil(charm.cost / 2);
+  state.gold += refund;
+  state.charms.splice(charmIndex, 1);
+  return { name: charm.name, refund };
+}
+
 function useInkCard(state, cardIndex) {
   const card = state.inkCards[cardIndex];
   if (!card) return false;
@@ -673,7 +716,7 @@ window.Game = {
   FLOORS, PAGE_NAMES, PAGE_GOLD, STORY_TWISTS, ALL_CHARMS, NARRATOR,
   createGameState, getTarget, getFloorInfo, startRound, submitWord,
   endRound, advancePage, skipPage, generateShopItems, buyShopItem,
-  upgradeDie, getDieUpgradeLevel, MAX_DIE_UPGRADES, DIE_UPGRADE_CHIPS,
+  upgradeDie, getDieUpgradeLevel, sellCharm, MAX_DIE_UPGRADES, DIE_UPGRADE_CHIPS,
   useInkCard, scoreWord, detectPatterns, hasDoubleLetter, hasConsonantRun,
   isBookend, isVowelHeavy, isAllUnique
 };

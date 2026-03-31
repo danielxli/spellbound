@@ -478,7 +478,23 @@ function renderCharms() {
   for (const charm of state.charms) {
     const pip = document.createElement('span');
     pip.className = `charm-pip rarity-${charm.rarity}`;
-    pip.textContent = charm.name;
+
+    // Show current value for scaling charms
+    let label = charm.name;
+    if (charm.scaling) {
+      if (charm.id === 'beginners_luck') {
+        const power = Math.max(0, 3 - state.floorsCleared);
+        label += ` (x${power})`;
+      } else if (charm.id === 'wordsmith') {
+        label += ` (+${state.longWordCount}m)`;
+      } else if (charm.id === 'ink_well') {
+        label += ` (+${Math.floor(state.patternCount / 5)}m)`;
+      } else if (charm.id === 'vocabulary') {
+        label += ` (+${Math.floor(state.usedLetters.size / 5)}m)`;
+      }
+    }
+
+    pip.textContent = label;
     pip.setAttribute('data-tooltip', charm.desc);
     pip.setAttribute('data-charm-id', charm.id);
     el.appendChild(pip);
@@ -1073,15 +1089,25 @@ function renderShop() {
   const charmsEl = document.getElementById('shop-charms');
   charmsEl.innerHTML = '';
   if (state.charms.length > 0) {
-    charmsEl.innerHTML = `<h3>Your Charms (${state.charms.length}/${state.maxCharms})</h3>`;
+    charmsEl.innerHTML = `<h3>Your Charms (${state.charms.length}/${state.maxCharms}) — click to sell</h3>`;
     const grid = document.createElement('div');
     grid.className = 'charms-grid';
-    for (const charm of state.charms) {
+    state.charms.forEach((charm, i) => {
+      const refund = Math.ceil(charm.cost / 2);
       const card = document.createElement('div');
       card.className = 'charm-card';
-      card.textContent = `${charm.name} — ${charm.desc}`;
+      card.style.cursor = 'pointer';
+      card.innerHTML = `${charm.name} — ${charm.desc} <span style="color: var(--gold); font-size: 10px;">(sell +${refund}g)</span>`;
+      card.title = `Sell ${charm.name} for ${refund} gold`;
+      card.addEventListener('click', () => {
+        const result = Game.sellCharm(state, i);
+        if (result) {
+          showToast(`Sold ${result.name} for ${result.refund} gold`);
+          renderShop();
+        }
+      });
       grid.appendChild(card);
-    }
+    });
     charmsEl.appendChild(grid);
   }
 }
