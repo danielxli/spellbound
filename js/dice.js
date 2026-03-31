@@ -41,11 +41,11 @@ const LETTER_CHIPS = {
 
 // Word length multipliers
 const LENGTH_MULT = {
-  3: 1, 4: 2, 5: 3, 6: 4, 7: 5
+  3: 1, 4: 2, 5: 3, 6: 4, 7: 5, 8: 6, 9: 7, 10: 8
 };
 
 function getWordLengthMult(length) {
-  if (length >= 7) return 5;
+  if (length >= 10) return 8;
   return LENGTH_MULT[length] || 1;
 }
 
