@@ -120,6 +120,9 @@ async function run() {
 
   function simRound(state) {
     Game.startRound(state); const wp = []; const target = Game.getTarget(state); let sixUsed = false;
+    // Use Extra Ink on hard pages
+    const extraInkIdx = state.inkCards.findIndex(c => c.id === 'extra_ink');
+    if (extraInkIdx >= 0 && target >= 1000) Game.useInkCard(state, extraInkIdx);
     while (state.submissionsLeft > 0) {
       if (state.roundScore >= target && wp.length > 0) break;
       let avail = findWords(state.grid, sixUsed ? 5 : 6).filter(w => {
@@ -132,7 +135,12 @@ async function run() {
         const fours = avail.filter(w => w.word.length === 4);
         if (fours.length > 0) avail = [fours[0], ...avail.filter(w => w.word.length !== 4)];
       }
-      if (!avail.length) { if (state.submissionsLeft > 1) { state.submissionsLeft--; GameDice.shakeGrid(state.grid); state.selectedCells = []; continue; } break; }
+      if (!avail.length) {
+        const freshIdx = state.inkCards.findIndex(c => c.id === 'fresh_page');
+        if (freshIdx >= 0) { Game.useInkCard(state, freshIdx); continue; }
+        if (state.submissionsLeft > 1) { state.submissionsLeft--; GameDice.shakeGrid(state.grid); state.selectedCells = []; continue; }
+        break;
+      }
       const pick = avail[0]; if (pick.word.length >= 6) sixUsed = true;
       state.selectedCells = pick.cells;
       const r = Game.submitWord(state);
@@ -160,6 +168,10 @@ async function run() {
       }
       if (state.gold < item.cost) continue;
       if (item.type === 'charm' && state.charms.length >= state.maxCharms) continue;
+      // Interest-aware: skip cheap upgrades if they'd drop an interest bracket
+      const curInt = Math.min(5, Math.floor(state.gold / 5));
+      const aftInt = Math.min(5, Math.floor((state.gold - item.cost) / 5));
+      if (aftInt < curInt && item.type !== 'charm' && item.cost <= 5) continue;
       const r = Game.buyShopItem(state, item);
       if (r.success && r.pickDie) {
         if (r.enchant) { for (let i = 0; i < 16; i++) { if (state.diceBag[i]?.type === 'standard') { Game.enchantDie(state, i, r.enchant); break; } } }
