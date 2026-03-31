@@ -1,0 +1,8 @@
+{
+  "name": "spellbound",
+  "version": "0.1.0",
+  "description": "Roguelike word game — Boggle meets Balatro, set in a cozy infinite library",
+  "scripts": {
+    "dev": "npx serve . -p 8080"
+  }
+}

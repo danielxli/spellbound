@@ -1,0 +1,13 @@
+{
+  "name": "Spellbound — The Endless Library",
+  "short_name": "Spellbound",
+  "description": "Roguelike word game — Boggle meets Balatro",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#1a1410",
+  "theme_color": "#d4a04a",
+  "icons": [
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}

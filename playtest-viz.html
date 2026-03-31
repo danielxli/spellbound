@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Spellbound Playtest Viz</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #1a1410; color: #e8dcc8; font-family: 'Courier New', monospace; font-size: 13px; padding: 24px; max-width: 1200px; margin: 0 auto; }
+  h1 { font-family: Georgia, serif; font-size: 28px; color: #d4a04a; margin-bottom: 4px; }
+  h2 { font-family: Georgia, serif; font-size: 18px; color: #d4a04a; margin: 24px 0 12px; border-bottom: 1px solid #3a2f24; padding-bottom: 6px; }
+  h3 { font-size: 14px; color: #c8b89a; margin: 16px 0 8px; }
+  .subtitle { color: #9a8a72; font-size: 13px; margin-bottom: 20px; }
+  .grid { display: grid; gap: 16px; }
+  .grid-2 { grid-template-columns: 1fr 1fr; }
+  .grid-3 { grid-template-columns: 1fr 1fr 1fr; }
+  .card { background: #2a2118; border: 1px solid #3a2f24; border-radius: 8px; padding: 16px; }
+  .stat-big { font-family: Georgia, serif; font-size: 36px; color: #d4a04a; }
+  .stat-label { font-size: 11px; color: #9a8a72; text-transform: uppercase; letter-spacing: 1px; margin-top: 4px; }
+  .bar-row { display: flex; align-items: center; gap: 8px; margin: 3px 0; }
+  .bar-label { width: 80px; text-align: right; color: #c8b89a; font-size: 12px; }
+  .bar-container { flex: 1; height: 20px; background: #2a2118; border-radius: 3px; position: relative; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 3px; transition: width 0.3s; position: relative; }
+  .bar-fill.green { background: linear-gradient(90deg, #2a6a2a, #4a9a4a); }
+  .bar-fill.amber { background: linear-gradient(90deg, #8a6a2e, #d4a04a); }
+  .bar-fill.red { background: linear-gradient(90deg, #8a2a2a, #c44040); }
+  .bar-fill.gold { background: linear-gradient(90deg, #b8960b, #ffd700); }
+  .bar-fill.blue { background: linear-gradient(90deg, #2a4a8a, #4a7ab0); }
+  .bar-fill.purple { background: linear-gradient(90deg, #5a2a7a, #8a5ab0); }
+  .bar-value { width: 60px; font-size: 12px; color: #9a8a72; }
+  .bar-pct { font-size: 11px; color: rgba(255,255,255,0.7); position: absolute; right: 6px; top: 2px; }
+  .run-row { display: flex; align-items: center; gap: 6px; padding: 3px 0; border-bottom: 1px solid #2a2118; font-size: 12px; }
+  .run-row:hover { background: #2a2118; }
+  .run-num { width: 24px; color: #9a8a72; text-align: right; }
+  .run-bar { height: 14px; border-radius: 2px; min-width: 2px; }
+  .run-result { width: 80px; }
+  .run-charms { color: #9a8a72; font-size: 11px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .victory { color: #ffd700; font-weight: bold; }
+  .death { color: #c44040; }
+  .charm-bar { display: flex; align-items: center; gap: 6px; margin: 2px 0; font-size: 12px; }
+  .charm-name { width: 200px; color: #c8b89a; }
+  .charm-count { width: 30px; text-align: right; color: #d4a04a; font-weight: bold; }
+  .charm-meter { flex: 1; height: 12px; background: #2a2118; border-radius: 2px; overflow: hidden; }
+  .charm-fill { height: 100%; border-radius: 2px; }
+  .rarity-common .charm-fill { background: #b8b8b8; }
+  .rarity-uncommon .charm-fill { background: #4a9a4a; }
+  .rarity-rare .charm-fill { background: #4a7ab0; }
+  .rarity-legendary .charm-fill { background: #d4a04a; }
+  .death-dot { display: inline-block; width: 14px; height: 14px; border-radius: 2px; margin: 1px; }
+  table { border-collapse: collapse; width: 100%; font-size: 12px; }
+  th { text-align: left; color: #9a8a72; font-weight: normal; text-transform: uppercase; font-size: 10px; letter-spacing: 1px; padding: 4px 8px; border-bottom: 1px solid #3a2f24; }
+  td { padding: 4px 8px; border-bottom: 1px solid #2a2118; }
+  .pass { color: #4a9a4a; }
+  .warn { color: #d4a04a; }
+  .fail { color: #c44040; }
+  #loading { text-align: center; padding: 60px; color: #9a8a72; }
+</style>
+</head>
+<body>
+<h1>Spellbound Playtest</h1>
+<div class="subtitle" id="config"></div>
+<div id="loading">Running simulations...</div>
+<div id="dashboard" style="display:none;"></div>
+
+<script src="js/dictionary.js"></script>
+<script src="js/dice.js"></script>
+<script src="js/game.js"></script>
+<script>
+// ── Trie for word finding ──
+class FastTrie {
+  constructor() { this.root = {}; }
+  insert(w) { let n = this.root; for (const c of w) { if (!n[c]) n[c] = {}; n = n[c]; } n.$ = true; }
+  check(s) { let n = this.root; for (const c of s) { if (!n[c]) return 'none'; n = n[c]; } return n.$ ? 'word' : 'prefix'; }
+}
+
+async function run() {
+  await GameDictionary.initDictionary();
+  const trie = new FastTrie();
+  for (const w of GameDictionary.wordSet) trie.insert(w);
+
+  const NUM_FLOORS = Game.FLOORS.length;
+  document.getElementById('config').textContent = `${NUM_FLOORS} floors | Gold/page: ${Game.PAGE_GOLD.join('/')} | Targets: ${Game.FLOORS.map(f=>`F${f.num}:${f.opening}/${f.rising}/${f.final}`).join('  ')}`;
+
+  function findWords(grid, maxLen) {
+    const found = [];
+    function dfs(r, c, vis, cells, word) {
+      const cell = grid[r][c]; if (cell.isWild) return;
+      const nw = word + cell.letter, nc = [...cells, cell], nv = new Set(vis); nv.add(`${r},${c}`);
+      const st = trie.check(nw); if (st === 'none') return;
+      if (st === 'word' && nw.length >= 3) {
+        const ch = nc.reduce((s, cl) => s + (GameDice.LETTER_CHIPS[cl.letter]||2) + (cl.die.bonusChips||0), 0);
+        found.push({ word: nw, cells: [...nc], score: ch * GameDice.getWordLengthMult(nw.length) });
+      }
+      if (nw.length >= maxLen) return;
+      for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
+        if (!dr && !dc) continue; const nr = r+dr, nc2 = c+dc;
+        if (nr<0||nr>3||nc2<0||nc2>3||nv.has(`${nr},${nc2}`)) continue;
+        dfs(nr, nc2, nv, nc, nw);
+      }
+    }
+    for (let r = 0; r < 4; r++) for (let c = 0; c < 4; c++) dfs(r, c, new Set(), [], '');
+    const best = {};
+    for (const f of found) if (!best[f.word] || f.score > best[f.word].score) best[f.word] = f;
+    return Object.values(best).sort((a, b) => b.score - a.score);
+  }
+
+  function charmValue(charm, state) {
+    const rs = { common:1, uncommon:2, rare:3, legendary:4 };
+    let v = (rs[charm.rarity]||1)*3;
+    if (charm.id === 'beginners_luck') { const p = Math.max(0, 3-state.floorsCleared); return p<=0?0:p*2; }
+    if (charm.scaling) v += 2;
+    if (charm.penalty) v -= 1;
+    if (charm.desc?.includes('x2')) v += 3;
+    if (charm.desc?.includes('x3')) v += 5;
+    if (charm.desc?.includes('x4')) v += 6;
+    if (charm.id === 'double_take') v += 8;
+    if (charm.id === 'echo_chamber') v += 5;
+    if (charm.id === 'golden_quill') v += 8;
+    return v;
+  }
+
+  function simRound(state) {
+    Game.startRound(state); const wp = []; const target = Game.getTarget(state); let sixUsed = false;
+    while (state.submissionsLeft > 0) {
+      if (state.roundScore >= target && wp.length > 0) break;
+      let avail = findWords(state.grid, sixUsed ? 5 : 6).filter(w => {
+        if (state.activeTwist?.name === 'The Sequel' && state.usedWords.has(w.word)) return false;
+        if (state.activeTwist?.name === 'Banned Books' && w.word.length === 3) return false;
+        if (state.activeTwist?.name === 'Purple Prose' && w.word.length < 5) return false;
+        return true;
+      });
+      if (avail.length > 1 && Math.random() < 0.3) {
+        const fours = avail.filter(w => w.word.length === 4);
+        if (fours.length > 0) avail = [fours[0], ...avail.filter(w => w.word.length !== 4)];
+      }
+      if (!avail.length) { if (state.submissionsLeft > 1) { state.submissionsLeft--; GameDice.shakeGrid(state.grid); state.selectedCells = []; continue; } break; }
+      const pick = avail[0]; if (pick.word.length >= 6) sixUsed = true;
+      state.selectedCells = pick.cells;
+      const r = Game.submitWord(state);
+      if (r.success) wp.push({ word: pick.word, score: r.result.score, len: pick.word.length }); else break;
+    }
+    return { wordsPlayed: wp, roundScore: state.roundScore, unusedSubs: state.submissionsLeft };
+  }
+
+  function simShop(state) {
+    const items = Game.generateShopItems(state);
+    const ro = { legendary:0, rare:1, uncommon:2, common:3 };
+    items.sort((a,b) => {
+      const to = { charm:0, die_upgrade:1, length_upgrade:2, die_enchant:3, ink_card:4 };
+      const ta=to[a.type]??9, tb=to[b.type]??9;
+      if(ta!==tb) return ta-tb;
+      if(a.type==='charm'&&b.type==='charm') return (ro[a.data.rarity]??9)-(ro[b.data.rarity]??9);
+      return 0;
+    });
+    for (const item of items) {
+      if (item.type === 'charm' && state.charms.length >= state.maxCharms) {
+        const nv = charmValue(item.data, state);
+        let wi = -1, wv = Infinity;
+        for (let i = 0; i < state.charms.length; i++) { const v = charmValue(state.charms[i], state); if (v < wv) { wv = v; wi = i; } }
+        if (wi >= 0 && nv > wv + 3) Game.sellCharm(state, wi);
+      }
+      if (state.gold < item.cost) continue;
+      if (item.type === 'charm' && state.charms.length >= state.maxCharms) continue;
+      const r = Game.buyShopItem(state, item);
+      if (r.success && r.pickDie) {
+        if (r.enchant) { for (let i = 0; i < 16; i++) { if (state.diceBag[i]?.type === 'standard') { Game.enchantDie(state, i, r.enchant); break; } } }
+        else { for (let i = 0; i < 16; i++) { if (state.diceBag[i] && Game.getDieUpgradeLevel(state.diceBag[i]) < Game.MAX_DIE_UPGRADES) { Game.upgradeDie(state, i, r.chipBonus); break; } } }
+      }
+    }
+  }
+
+  function simRun() {
+    const state = Game.createGameState();
+    const log = { floorsCleared:0, wordsPlayed:0, totalScore:0, victory:false, charms:[], diedAt:null, pages:[], allWords:[], goldEarned:0, goldSpent:0 };
+    for (let floor = 0; floor < NUM_FLOORS; floor++) {
+      for (let page = 0; page < 3; page++) {
+        state.floor = floor; state.page = page;
+        const target = Game.getTarget(state);
+        const { wordsPlayed, roundScore, unusedSubs } = simRound(state);
+        log.wordsPlayed += wordsPlayed.length; log.totalScore += roundScore;
+        for (const w of wordsPlayed) log.allWords.push(w);
+        log.pages.push({ floor:floor+1, page:['O','R','F'][page], target, score:roundScore, passed:roundScore>=target, words:wordsPlayed.length, unusedSubs });
+        const er = Game.endRound(state);
+        if (er.passed) log.goldEarned += er.totalGold;
+        if (!er.passed) { log.diedAt = `F${floor+1}${['O','R','F'][page]}`; log.floorsCleared = state.floorsCleared; log.charms = state.charms.map(c=>({name:c.name,rarity:c.rarity})); return log; }
+        Game.advancePage(state);
+        if (state.phase === 'victory') { log.victory = true; log.floorsCleared = NUM_FLOORS; log.charms = state.charms.map(c=>({name:c.name,rarity:c.rarity})); return log; }
+        const gb = state.gold;
+        simShop(state);
+        log.goldSpent += gb - state.gold;
+      }
+    }
+    log.floorsCleared = state.floorsCleared; log.charms = state.charms.map(c=>({name:c.name,rarity:c.rarity})); return log;
+  }
+
+  // Run sims
+  const N = 30;
+  const results = [];
+  for (let i = 0; i < N; i++) results.push(simRun());
+
+  // ── Build dashboard ──
+  const d = document.getElementById('dashboard');
+  d.style.display = 'block';
+  document.getElementById('loading').style.display = 'none';
+
+  const victories = results.filter(r=>r.victory).length;
+  const avgFloor = (results.reduce((s,r)=>s+r.floorsCleared,0)/N).toFixed(1);
+  const avgWords = Math.round(results.reduce((s,r)=>s+r.wordsPlayed,0)/N);
+  const avgScore = Math.round(results.reduce((s,r)=>s+r.totalScore,0)/N);
+  const avgGoldE = Math.round(results.reduce((s,r)=>s+r.goldEarned,0)/N);
+  const avgGoldS = Math.round(results.reduce((s,r)=>s+r.goldSpent,0)/N);
+
+  // Summary cards
+  d.innerHTML = `
+    <div class="grid grid-3" style="margin-bottom:16px;">
+      <div class="card"><div class="stat-big">${victories}/${N}</div><div class="stat-label">Win Rate (${Math.round(victories/N*100)}%)</div></div>
+      <div class="card"><div class="stat-big">${avgFloor}</div><div class="stat-label">Avg Floor Reached</div></div>
+      <div class="card"><div class="stat-big">${avgScore.toLocaleString()}</div><div class="stat-label">Avg Score</div></div>
+    </div>
+    <div class="grid grid-3" style="margin-bottom:8px;">
+      <div class="card"><div class="stat-big" style="font-size:24px;">${avgWords}</div><div class="stat-label">Avg Words / Run</div></div>
+      <div class="card"><div class="stat-big" style="font-size:24px;color:#ffd700;">${avgGoldE}g</div><div class="stat-label">Avg Gold Earned</div></div>
+      <div class="card"><div class="stat-big" style="font-size:24px;color:#c44040;">${avgGoldS}g</div><div class="stat-label">Avg Gold Spent</div></div>
+    </div>
+  `;
+
+  // Survival funnel
+  let survivalHTML = '<h2>Survival Funnel</h2>';
+  for (let f = 1; f <= NUM_FLOORS; f++) {
+    const survived = results.filter(r => r.floorsCleared >= f).length;
+    const pct = Math.round(survived / N * 100);
+    const color = pct >= 80 ? 'green' : pct >= 40 ? 'amber' : pct >= 15 ? 'red' : 'red';
+    const label = f === NUM_FLOORS ? ' (Victory)' : '';
+    survivalHTML += `<div class="bar-row">
+      <div class="bar-label">Floor ${f}${label}</div>
+      <div class="bar-container"><div class="bar-fill ${color}" style="width:${pct}%"><span class="bar-pct">${pct}%</span></div></div>
+      <div class="bar-value">${survived}/${N}</div>
+    </div>`;
+  }
+  d.innerHTML += survivalHTML;
+
+  // Pass rates table
+  let tableHTML = '<h2>Page Pass Rates</h2><table><tr><th>Page</th><th>Pass</th><th>%</th><th>Avg Score</th><th>Target</th><th>Words</th><th>Saved</th><th></th></tr>';
+  for (let f = 1; f <= NUM_FLOORS; f++) {
+    for (const p of ['O','R','F']) {
+      const pgs = results.flatMap(r=>r.pages).filter(pg=>pg.floor===f&&pg.page===p);
+      if (!pgs.length) continue;
+      const passed = pgs.filter(pg=>pg.passed).length;
+      const avg = Math.round(pgs.reduce((s,pg)=>s+pg.score,0)/pgs.length);
+      const avgW = (pgs.reduce((s,pg)=>s+pg.words,0)/pgs.length).toFixed(1);
+      const avgU = (pgs.reduce((s,pg)=>s+pg.unusedSubs,0)/pgs.length).toFixed(1);
+      const pct = Math.round(passed/pgs.length*100);
+      const cls = pct >= 80 ? 'pass' : pct >= 40 ? 'warn' : 'fail';
+      const pName = {O:'Opening',R:'Rising',F:'Final'}[p];
+      tableHTML += `<tr><td>F${f} ${pName}</td><td>${passed}/${pgs.length}</td><td class="${cls}">${pct}%</td><td>${avg.toLocaleString()}</td><td>${pgs[0].target.toLocaleString()}</td><td>${avgW}</td><td>${avgU}</td><td>${'█'.repeat(Math.round(pct/5))}</td></tr>`;
+    }
+  }
+  tableHTML += '</table>';
+  d.innerHTML += tableHTML;
+
+  // Per-run waterfall
+  let runHTML = '<h2>Run Results</h2>';
+  const maxFloor = NUM_FLOORS;
+  for (let i = 0; i < N; i++) {
+    const r = results[i];
+    const pct = Math.round(r.floorsCleared / maxFloor * 100);
+    const color = r.victory ? '#ffd700' : `hsl(${r.floorsCleared * 15}, 60%, 45%)`;
+    const status = r.victory ? '<span class="victory">VICTORY</span>' : `<span class="death">${r.diedAt}</span>`;
+    const charms = r.charms.map(c => c.name).join(', ');
+    runHTML += `<div class="run-row">
+      <div class="run-num">${i+1}</div>
+      <div class="run-bar" style="width:${pct}%;background:${color};"></div>
+      <div class="run-result">${status}</div>
+      <div class="run-charms" title="${charms}">${charms}</div>
+    </div>`;
+  }
+  d.innerHTML += runHTML;
+
+  // Charm popularity
+  const charmCounts = {};
+  for (const r of results) for (const c of r.charms) {
+    const key = `${c.name}|${c.rarity}`;
+    charmCounts[key] = (charmCounts[key]||0)+1;
+  }
+  const sorted = Object.entries(charmCounts).sort((a,b)=>b[1]-a[1]);
+  const maxCount = sorted[0]?.[1] || 1;
+  let charmHTML = '<h2>Charm Popularity</h2>';
+  for (const [key, count] of sorted.slice(0, 20)) {
+    const [name, rarity] = key.split('|');
+    const pct = Math.round(count / maxCount * 100);
+    charmHTML += `<div class="charm-bar rarity-${rarity}">
+      <div class="charm-count">${count}x</div>
+      <div class="charm-name">${name}</div>
+      <div class="charm-meter"><div class="charm-fill" style="width:${pct}%"></div></div>
+    </div>`;
+  }
+  d.innerHTML += charmHTML;
+
+  // Word length distribution
+  const lenDist = {};
+  let allScores = [];
+  for (const r of results) for (const w of r.allWords) {
+    lenDist[w.len] = (lenDist[w.len]||0)+1;
+    allScores.push(w.score);
+  }
+  allScores.sort((a,b)=>a-b);
+  const totalW = allScores.length;
+  const maxLen = Math.max(...Object.values(lenDist));
+  let wordHTML = '<h2>Word Stats</h2><div class="grid grid-2"><div class="card"><h3>Length Distribution</h3>';
+  for (const [len, count] of Object.entries(lenDist).sort((a,b)=>a[0]-b[0])) {
+    const pct = Math.round(count / maxLen * 100);
+    const colors = ['','','','amber','blue','green','purple','gold'];
+    wordHTML += `<div class="bar-row">
+      <div class="bar-label">${len} letters</div>
+      <div class="bar-container"><div class="bar-fill ${colors[len]||'amber'}" style="width:${pct}%"></div></div>
+      <div class="bar-value">${count} (${Math.round(count/totalW*100)}%)</div>
+    </div>`;
+  }
+  wordHTML += '</div><div class="card"><h3>Score Distribution</h3>';
+  // Histogram buckets
+  const buckets = [0, 100, 250, 500, 1000, 2000, 4000, 8000, Infinity];
+  const bucketLabels = ['0-100', '100-250', '250-500', '500-1k', '1k-2k', '2k-4k', '4k-8k', '8k+'];
+  const bucketCounts = new Array(buckets.length - 1).fill(0);
+  for (const s of allScores) {
+    for (let b = 0; b < buckets.length - 1; b++) {
+      if (s >= buckets[b] && s < buckets[b+1]) { bucketCounts[b]++; break; }
+    }
+  }
+  const maxBucket = Math.max(...bucketCounts);
+  for (let b = 0; b < bucketCounts.length; b++) {
+    const pct = Math.round(bucketCounts[b] / maxBucket * 100);
+    wordHTML += `<div class="bar-row">
+      <div class="bar-label">${bucketLabels[b]}</div>
+      <div class="bar-container"><div class="bar-fill amber" style="width:${pct}%"></div></div>
+      <div class="bar-value">${bucketCounts[b]}</div>
+    </div>`;
+  }
+  wordHTML += `<div style="margin-top:8px;font-size:11px;color:#9a8a72;">Median: ${allScores[Math.floor(totalW/2)]} | p90: ${allScores[Math.floor(totalW*0.9)]} | Max: ${allScores[totalW-1]}</div>`;
+  wordHTML += '</div></div>';
+  d.innerHTML += wordHTML;
+
+  // Death heatmap
+  const deaths = {};
+  for (const r of results) if (r.diedAt) deaths[r.diedAt] = (deaths[r.diedAt]||0)+1;
+  let deathHTML = '<h2>Death Heatmap</h2><div class="card"><div style="display:grid;grid-template-columns:60px repeat(3,1fr);gap:4px;font-size:12px;">';
+  deathHTML += '<div></div><div style="text-align:center;color:#9a8a72;">Opening</div><div style="text-align:center;color:#9a8a72;">Rising</div><div style="text-align:center;color:#9a8a72;">Final</div>';
+  for (let f = 1; f <= NUM_FLOORS; f++) {
+    deathHTML += `<div style="color:#c8b89a;">Floor ${f}</div>`;
+    for (const p of ['O','R','F']) {
+      const key = `F${f}${p}`;
+      const count = deaths[key] || 0;
+      const intensity = count === 0 ? 0 : Math.min(1, count / 10);
+      const bg = count === 0 ? '#2a2118' : `rgba(196, 64, 64, ${0.2 + intensity * 0.6})`;
+      deathHTML += `<div style="text-align:center;padding:6px;border-radius:4px;background:${bg};color:${count?'#e8dcc8':'#5a4a3a'}">${count || '·'}</div>`;
+    }
+  }
+  deathHTML += '</div></div>';
+  d.innerHTML += deathHTML;
+}
+
+run();
+</script>
+</body>
+</html>

@@ -2,24 +2,40 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Spellbound — The Endless Library</title>
   <link rel="stylesheet" href="css/style.css">
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#d4a04a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📖</text></svg>">
 </head>
 <body>
   <div id="app">
 
-    <!-- ═══ Title Screen ═══ -->
-    <div id="title-screen">
+    <!-- ═══ Loading Screen ═══ -->
+    <div id="loading-screen">
       <h1>Spellbound</h1>
       <div class="subtitle">The Endless Library</div>
+      <div class="loading-spinner"></div>
+      <div id="loading-status" class="loading-status">Opening the library doors...</div>
+    </div>
+
+    <!-- ═══ Title Screen ═══ -->
+    <div id="title-screen" style="display:none;">
+      <button class="settings-gear" id="title-settings-btn" onclick="showSettings()">&#9881;</button>
+      <h1>Spellbound</h1>
+      <div class="subtitle">The Endless Library</div>
+      <div class="title-ornament">───── ◈ ─────</div>
       <div class="tagline">
         Roll letter dice. Trace words. Build your engine.<br>
         Climb the floors before your story falls apart.
       </div>
-      <button class="btn btn-gold" onclick="startGame()">Begin Writing</button>
-      <div style="color: var(--text-dark); font-size: 11px; margin-top: 8px;">
+      <div id="title-buttons">
+        <button class="btn btn-gold" id="start-btn" onclick="startGame()">Begin Writing</button>
+      </div>
+      <div id="title-stats" style="color: var(--text-dark); font-size: 11px; margin-top: 8px;">
         Playing as The Novelist — 5 submissions per round, no timer
       </div>
     </div>
@@ -33,6 +49,7 @@
           <div id="floor-name" class="floor-name"></div>
           <div id="floor-genre" class="floor-genre"></div>
         </div>
+        <button class="pause-btn" onclick="showPause()">&#9881;</button>
         <div class="page-info">
           <div id="page-name" class="page-name"></div>
           <div id="gold-display" class="gold-display"></div>
@@ -88,18 +105,23 @@
     <div id="shop-screen">
       <div class="shop-header">
         <h2 id="shop-title"></h2>
-        <div id="shop-floor-info" style="font-size: 12px; color: var(--text-dim);"></div>
+        <div id="shop-floor-info"></div>
         <div id="shop-gold" class="shop-gold"></div>
       </div>
       <div id="shop-items" class="shop-items"></div>
+      <div class="shop-divider">───── Your Build ─────</div>
       <div id="shop-charms" class="charms-section"></div>
       <button class="btn btn-gold" onclick="leaveShop()">Continue to Next Page</button>
     </div>
 
   </div>
+  <div id="vignette"></div>
 
   <script src="js/dictionary.js"></script>
   <script src="js/dice.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/settings.js"></script>
+  <script src="js/audio.js"></script>
   <script src="js/game.js"></script>
   <script src="js/ui.js"></script>
 </body>

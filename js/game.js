@@ -2,28 +2,25 @@
 
 // ── Floor definitions ──
 const FLOORS = [
-  { num: 1, name: 'The First Sentence', genre: 'Coming of Age', opening: 50, rising: 75, final: 100,
+  { num: 1, name: 'The First Sentence', genre: 'Coming of Age', opening: 50, rising: 100, final: 150,
     intro: 'The library door creaks open. Dust motes swirl in amber lamplight as you step inside. A blank notebook lies open on the nearest desk, its pages waiting.',
     opening_line: 'It was the kind of day that changed everything, though no one knew it yet.' },
-  { num: 2, name: 'The Plot Thickens', genre: 'Mystery', opening: 150, rising: 225, final: 300,
+  { num: 2, name: 'The Plot Thickens', genre: 'Mystery', opening: 250, rising: 375, final: 500,
     intro: 'The staircase spirals upward. On this floor, the shelves are darker, the shadows longer. A magnifying glass sits on a bloodstained desk.',
     opening_line: 'The detective stared at the letter. Three words. Three impossibly wrong words.' },
-  { num: 3, name: 'The Moonlit Moor', genre: 'Gothic Romance', opening: 400, rising: 600, final: 800,
-    intro: 'Candles flicker in iron sconces. The books here are bound in velvet, their spines embossed with thorned roses. Something sighs behind the shelves.',
-    opening_line: 'She had sworn never to return to Thornfield, and yet here she stood in the rain.' },
-  { num: 4, name: 'City of Whispers', genre: 'Thriller', opening: 1000, rising: 1500, final: 2000,
+  { num: 3, name: 'City of Whispers', genre: 'Thriller', opening: 500, rising: 750, final: 1000,
     intro: 'The floor above is all glass and steel. Headlines scroll across the walls. Every book here is redacted, censored, classified.',
     opening_line: 'The phone rang at 3 AM. On the other end, a voice said only: "They know."' },
-  { num: 5, name: 'The Long Winter', genre: 'Epic Fantasy', opening: 2500, rising: 3750, final: 5000,
+  { num: 4, name: 'The Long Winter', genre: 'Epic Fantasy', opening: 1000, rising: 1500, final: 1800,
     intro: 'Frost creeps across the bookshelves. The volumes here are massive, leather-bound, ancient. A sword is embedded in the reading desk.',
     opening_line: 'The kingdom had forgotten magic, but magic had not forgotten the kingdom.' },
-  { num: 6, name: 'Palace of Mirrors', genre: 'Surrealism', opening: 5500, rising: 8250, final: 11000,
+  { num: 5, name: 'Palace of Mirrors', genre: 'Surrealism', opening: 2000, rising: 3000, final: 4000,
     intro: 'The geometry of this floor is wrong. Staircases lead sideways. Books read themselves aloud in languages that don\'t exist. A cat watches you with too many eyes.',
     opening_line: 'The clock struck thirteen and the fish began to speak in perfect iambic pentameter.' },
-  { num: 7, name: 'The Unwritten', genre: 'Metafiction', opening: 10000, rising: 15000, final: 20000,
+  { num: 6, name: 'The Unwritten', genre: 'Metafiction', opening: 4000, rising: 6000, final: 8000,
     intro: 'The shelves here are nearly empty. The few books that remain have no endings. One of them is about a writer climbing an endless library.',
     opening_line: 'The character looked up from the page and realized, with growing unease, that someone was reading.' },
-  { num: 8, name: 'The Last Chapter', genre: '???', opening: 15000, rising: 22500, final: 30000,
+  { num: 7, name: 'The Last Chapter', genre: '???', opening: 8000, rising: 12000, final: 16000,
     intro: 'The final floor. There is only one book here, open to its last page. The words shimmer and shift. You recognize your own handwriting.',
     opening_line: 'And so the writer reached the top of the library, and the library held its breath.' }
 ];
@@ -605,15 +602,49 @@ const LENGTH_UPGRADE_NAMES = {
   10: { name: 'Magnum Opus', flavor: 'The longest of words.' }
 };
 
+// ── Weighted charm rarity roll ──
+// Legendary chance scales: 3% on F1-2, 5% on F3, 8% on F4, 10% on F5+
+function rollCharmByRarity(available, floor, excludeIds) {
+  const legendaryChance = floor <= 1 ? 0.03 : floor === 2 ? 0.05 : floor === 3 ? 0.08 : 0.10;
+  const weights = {
+    common:    0.40,
+    uncommon:  0.30,
+    rare:      0.20 + (0.10 - legendaryChance), // rare absorbs what legendary loses
+    legendary: legendaryChance
+  };
+
+  // Filter out already-picked charms
+  const pool = available.filter(c => !excludeIds.has(c.id));
+  if (pool.length === 0) return null;
+
+  // Roll a rarity
+  const roll = Math.random();
+  let target;
+  if (roll < weights.common) target = 'common';
+  else if (roll < weights.common + weights.uncommon) target = 'uncommon';
+  else if (roll < weights.common + weights.uncommon + weights.rare) target = 'rare';
+  else target = 'legendary';
+
+  // Pick from that rarity tier, fall back to any if tier is empty
+  let candidates = pool.filter(c => c.rarity === target);
+  if (candidates.length === 0) candidates = pool;
+
+  return candidates[Math.floor(Math.random() * candidates.length)];
+}
+
 function generateShopItems(state) {
   const items = [];
 
-  // ── 1-2 Charms ──
+  // ── 1-2 Charms (weighted by rarity, scaling with floor) ──
   const availableCharms = ALL_CHARMS.filter(c => !state.charms.some(owned => owned.id === c.id));
-  const shuffledCharms = shuffle(availableCharms);
-  const charmCount = state.charms.length >= state.maxCharms ? 0 : Math.min(2, shuffledCharms.length);
+  const charmCount = state.charms.length >= state.maxCharms ? 0 : Math.min(2, availableCharms.length);
+  const picked = new Set();
   for (let i = 0; i < charmCount; i++) {
-    items.push({ type: 'charm', data: shuffledCharms[i], cost: shuffledCharms[i].cost });
+    const charm = rollCharmByRarity(availableCharms, state.floor, picked);
+    if (charm) {
+      picked.add(charm.id);
+      items.push({ type: 'charm', data: charm, cost: charm.cost });
+    }
   }
 
   // ── 1 Word-type upgrade (like Balatro planet cards) ──
@@ -644,6 +675,15 @@ function generateShopItems(state) {
       chipBonus: 5
     },
     cost: 5
+  });
+
+  // ── 1 Die enchantment (transform an existing die) ──
+  const enchantTypes = Object.values(GameDice.DIE_ENCHANTMENTS);
+  const enchant = enchantTypes[Math.floor(Math.random() * enchantTypes.length)];
+  items.push({
+    type: 'die_enchant',
+    data: enchant,
+    cost: enchant.cost
   });
 
   // ── 1 Ink card ──
@@ -707,6 +747,10 @@ function buyShopItem(state, item) {
       // Requires picking a die — returns 'pick_die' signal for UI to handle
       return { success: true, msg: 'pick_die', pickDie: true, chipBonus: item.data.chipBonus };
 
+    case 'die_enchant':
+      // Requires picking a die — returns signal for UI to handle
+      return { success: true, msg: 'pick_die', pickDie: true, enchant: item.data };
+
     default:
       return { success: false, reason: 'Unknown item.' };
   }
@@ -722,6 +766,17 @@ function upgradeDie(state, dieIndex, chipBonus) {
   const currentLevel = Math.round((die.bonusChips || 0) / DIE_UPGRADE_CHIPS);
   if (currentLevel >= MAX_DIE_UPGRADES) return false;
   die.bonusChips = (die.bonusChips || 0) + chipBonus;
+  return true;
+}
+
+function enchantDie(state, dieIndex, enchant) {
+  const die = state.diceBag[dieIndex];
+  if (!die) return false;
+  if (die.type !== 'standard') return false; // already enchanted
+  die.type = enchant.type;
+  die.bonusChips = (die.bonusChips || 0) + (enchant.bonusChips || 0);
+  die.bonusMult = (die.bonusMult || 0) + (enchant.bonusMult || 0);
+  die.bonusGold = (die.bonusGold || 0) + (enchant.bonusGold || 0);
   return true;
 }
 
@@ -764,7 +819,7 @@ window.Game = {
   FLOORS, PAGE_NAMES, PAGE_GOLD, STORY_TWISTS, ALL_CHARMS, NARRATOR,
   createGameState, getTarget, getFloorInfo, startRound, submitWord,
   endRound, advancePage, generateShopItems, buyShopItem,
-  upgradeDie, getDieUpgradeLevel, sellCharm, MAX_DIE_UPGRADES, DIE_UPGRADE_CHIPS,
+  upgradeDie, enchantDie, getDieUpgradeLevel, sellCharm, MAX_DIE_UPGRADES, DIE_UPGRADE_CHIPS,
   useInkCard, scoreWord, detectPatterns, hasDoubleLetter, hasConsonantRun,
   isBookend, isVowelHeavy, isAllUnique
 };

@@ -12,24 +12,82 @@ function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 // ── Initialization ──
 async function init() {
-  const startBtn = document.querySelector('#title-screen .btn');
-  if (startBtn) { startBtn.classList.add('btn-disabled'); startBtn.textContent = 'Loading dictionary...'; }
+  // Show loading screen
+  document.getElementById('loading-screen').style.display = 'flex';
+  document.getElementById('title-screen').style.display = 'none';
 
+  document.getElementById('loading-status').textContent = 'Loading dictionary...';
   await GameDictionary.initDictionary();
 
-  if (startBtn) { startBtn.classList.remove('btn-disabled'); startBtn.textContent = 'Begin Writing'; }
+  document.getElementById('loading-status').textContent = 'Preparing your desk...';
+  Settings.init();
 
   state = Game.createGameState();
   createDustMotes();
+
+  // Check for saved run
+  if (Storage.hasRun()) {
+    const titleBtns = document.getElementById('title-buttons');
+    const resumeBtn = document.createElement('button');
+    resumeBtn.className = 'btn btn-gold';
+    resumeBtn.textContent = 'Resume Writing';
+    resumeBtn.onclick = resumeGame;
+    titleBtns.insertBefore(resumeBtn, titleBtns.firstChild);
+    document.getElementById('start-btn').textContent = 'New Run';
+    // Show career stats if available
+    const stats = Storage.loadStats();
+    if (stats.runsPlayed > 0) {
+      document.getElementById('title-stats').textContent = `${stats.runsPlayed} runs · Best floor: ${stats.bestFloor} · Best score: ${stats.bestScore}`;
+    }
+  } else {
+    const stats = Storage.loadStats();
+    if (stats.runsPlayed > 0) {
+      document.getElementById('title-stats').textContent = `${stats.runsPlayed} runs · Best floor: ${stats.bestFloor} · Best score: ${stats.bestScore}`;
+    }
+  }
+
+  // Transition to title
+  document.getElementById('loading-screen').style.display = 'none';
   render();
 
   document.addEventListener('keydown', handleKeydown);
+
+  // Register service worker for PWA/offline
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  }
+}
+
+function resumeGame() {
+  const loaded = Storage.loadRun();
+  if (!loaded || !loaded.grid) {
+    Storage.clearRun();
+    startGame();
+    return;
+  }
+  state = loaded;
+  GameAudio.ensureContext();
+  render();
 }
 
 function handleKeydown(e) {
+  // Pause overlay takes priority
+  if (e.key === 'Escape' && document.getElementById('pause-overlay')) {
+    closePause();
+    return;
+  }
+  if (e.key === 'Escape' && document.getElementById('settings-overlay')) {
+    closeSettings();
+    return;
+  }
+
   if (state.phase === 'playing' && !scoringAnimationActive) {
     if (e.key === 'Enter') doSubmitWord();
-    else if (e.key === 'Escape' || e.key === 'Backspace') clearSelection();
+    else if (e.key === 'Backspace') clearSelection();
+    else if (e.key === 'Escape') {
+      if (state.selectedCells.length > 0) clearSelection();
+      else showPause();
+    }
   }
   // Space/Enter/Escape to skip scoring animation
   if (scoringAnimationActive && (e.key === ' ' || e.key === 'Enter' || e.key === 'Escape')) {
@@ -48,7 +106,7 @@ function createDustMotes() {
     mote.style.top = Math.random() * 100 + '%';
     mote.style.animationDelay = Math.random() * 8 + 's';
     mote.style.animationDuration = (6 + Math.random() * 4) + 's';
-    mote.style.width = (2 + Math.random() * 2) + 'px';
+    mote.style.width = (3 + Math.random() * 3) + 'px';
     mote.style.height = mote.style.width;
     app.appendChild(mote);
   }
@@ -89,10 +147,12 @@ function narrateWordReaction(result) {
 
 // ── Main render ──
 function render() {
+  const loadingScreen = document.getElementById('loading-screen');
   const titleScreen = document.getElementById('title-screen');
   const gameScreen = document.getElementById('game-screen');
   const shopScreen = document.getElementById('shop-screen');
 
+  loadingScreen.style.display = 'none';
   titleScreen.style.display = 'none';
   gameScreen.style.display = 'none';
   shopScreen.style.display = 'none';
@@ -128,12 +188,16 @@ function render() {
 
 // ── Start Game — with floor intro ──
 function startGame() {
+  Storage.clearRun();
   state = Game.createGameState();
+  GameAudio.ensureContext();
   showFloorIntro(() => {
     state.phase = 'playing';
     Game.startRound(state);
     render();
     animateGridEntrance();
+    GameAudio.playDeal();
+    Storage.saveRun(state);
   });
 }
 
@@ -157,6 +221,7 @@ function showFloorIntro(onContinue) {
   document.getElementById('app').appendChild(div);
 
   document.getElementById('floor-intro-btn').addEventListener('click', () => {
+    GameAudio.playTransition();
     div.classList.add('floor-intro-exit');
     setTimeout(() => {
       div.remove();
@@ -178,6 +243,7 @@ function showTwistReveal(twist, onContinue) {
   document.getElementById('app').appendChild(div);
 
   document.getElementById('twist-continue-btn').addEventListener('click', () => {
+    GameAudio.playTransition();
     div.classList.add('floor-intro-exit');
     setTimeout(() => { div.remove(); onContinue(); }, 400);
   });
@@ -257,8 +323,15 @@ function spawnVictoryParticles() {
     p.style.setProperty('--drift', (Math.random() * 60 - 30) + 'px');
     p.style.animationDelay = (Math.random() * 800) + 'ms';
     p.style.animationDuration = (1 + Math.random() * 1) + 's';
-    p.style.width = (3 + Math.random() * 5) + 'px';
-    p.style.height = p.style.width;
+    const size = 3 + Math.random() * 5;
+    p.style.width = size + 'px';
+    if (Math.random() > 0.5) {
+      p.style.height = (size * 1.8) + 'px';
+      p.style.borderRadius = '1px';
+      p.style.transform = `rotate(${Math.floor(Math.random() * 360)}deg)`;
+    } else {
+      p.style.height = size + 'px';
+    }
     document.getElementById('app').appendChild(p);
     setTimeout(() => p.remove(), 3000);
   }
@@ -545,12 +618,18 @@ function onCellClick(r, c) {
   }
 
   if (cell.isWild) {
-    const letter = prompt('Wild die! Enter a letter (A-Z):');
-    if (!letter || !/^[A-Za-z]$/.test(letter)) return;
-    cell.wildLetter = letter.toUpperCase();
+    showWildPicker(cell, () => {
+      state.selectedCells.push(cell);
+      GameAudio.playTap();
+      GameAudio.haptic('light');
+      renderWordDisplay(); renderGrid(); renderActions(); renderSkipButton();
+    });
+    return;
   }
 
   state.selectedCells.push(cell);
+  GameAudio.playTap();
+  GameAudio.haptic('light');
   renderWordDisplay(); renderGrid(); renderActions(); renderSkipButton();
 }
 
@@ -620,7 +699,10 @@ function doShakeGrid() {
       rerolledPositions.add(`${r},${c}`);
 
   GameDice.shakeGrid(state.grid);
+  GameAudio.playShake();
+  GameAudio.haptic('medium');
   narrate(pick(Game.NARRATOR.shake));
+  Storage.saveRun(state);
 
   // Shake the grid container
   const container = document.getElementById('grid-container');
@@ -646,9 +728,13 @@ function doSubmitWord() {
   const result = Game.submitWord(state);
 
   if (!result.success) {
+    GameAudio.playInvalid();
     showToast(result.reason);
     return;
   }
+
+  GameAudio.playSubmit();
+  GameAudio.haptic('medium');
 
   if (!state.wordHistory) state.wordHistory = [];
   state.wordHistory.push(result.result);
@@ -661,11 +747,17 @@ function doSubmitWord() {
   runScoringAnimation(result.result).then(() => {
     scoringAnimationActive = false;
 
-    // Screen shake for big scores
-    if (result.result.score >= 150) triggerScreenShake();
+    // Screen shake + haptic for big scores
+    if (result.result.score >= 150) {
+      triggerScreenShake();
+      GameAudio.haptic('heavy');
+    }
 
     // Narrator
     narrateWordReaction(result.result);
+
+    // Auto-save after word submit
+    Storage.saveRun(state);
 
     // Check if round is over
     if (state.submissionsLeft <= 0) {
@@ -699,6 +791,7 @@ function runScoringAnimation(result) {
         <div class="scoring-length-mult" id="slength">
           ${result.word.length} letters → ×${result.baseMult} base mult
         </div>
+        <div class="scoring-divider"></div>
         <div class="scoring-totals">
           <span class="scoring-chips-total" id="schips-total">0</span>
           <span class="scoring-x">×</span>
@@ -715,9 +808,9 @@ function runScoringAnimation(result) {
     document.getElementById('app').appendChild(overlay);
 
     // Animation timeline
-    const LETTER_DELAY = 120; // ms between each letter
-    const CHARM_DELAY = 300;  // ms between each charm
-    let t = 200; // start delay
+    const LETTER_DELAY = animDelay(120); // ms between each letter
+    const CHARM_DELAY = animDelay(300);  // ms between each charm
+    let t = animDelay(200); // start delay
 
     let runningChips = 0;
     const multEl = () => document.getElementById('smult-total');
@@ -732,6 +825,7 @@ function runScoringAnimation(result) {
         setTimeout(() => {
           if (chip) chip.classList.add('shown');
           runningChips += l.chips;
+          GameAudio.playChipCount(600 + i * 80);
           const cel = chipsEl();
           if (cel) {
             cel.textContent = runningChips;
@@ -779,8 +873,9 @@ function runScoringAnimation(result) {
         `;
         charmsDiv.appendChild(entry);
 
-        // Trigger animation
+        // Trigger animation + sound
         requestAnimationFrame(() => entry.classList.add('shown'));
+        GameAudio.playCharm();
 
         // Update running totals
         currentBonusChips += charm.chipDelta;
@@ -821,6 +916,7 @@ function runScoringAnimation(result) {
     setTimeout(() => {
       const el = document.getElementById('sfinal');
       if (el) el.classList.add('shown');
+      GameAudio.playScoreSlam();
     }, t);
 
     t += 400;
@@ -892,6 +988,7 @@ function useInkCard(index) {
   }
 
   state.selectedCells = [];
+  Storage.saveRun(state);
   renderGame();
 }
 
@@ -930,8 +1027,8 @@ function showPageResult() {
   document.getElementById('app').appendChild(div);
 
   // Animate the rows stepping in
-  let t = 200;
-  const step = 350;
+  let t = animDelay(200);
+  const step = animDelay(350);
 
   setTimeout(() => {
     const el = document.getElementById('gr-title');
@@ -960,6 +1057,7 @@ function showPageResult() {
   setTimeout(() => {
     const el = document.getElementById('gr-total');
     if (el) el.classList.add('shown');
+    GameAudio.playGold();
   }, t);
 
   t += 500;
@@ -972,10 +1070,11 @@ function showPageResult() {
 }
 
 function proceedFromResult() {
-  const wasPage = state.page;
   Game.advancePage(state);
 
   if (state.phase === 'victory') {
+    Storage.clearRun();
+    Storage.updateStats(state);
     render();
     return;
   }
@@ -985,16 +1084,23 @@ function proceedFromResult() {
     shopItems.forEach(item => item.sold = false);
   }
 
+  Storage.saveRun(state);
+  GameAudio.playTransition();
+
   // Page turn transition
   showPageTurn(() => render());
 }
 
 // ── Shop Screen ──
+const SHOP_ICONS = {
+  charm: '✦', die_upgrade: '⬡', die_enchant: '◈', length_upgrade: '↑', ink_card: '🪶', remove_die: '✂'
+};
+
 function renderShop() {
   const floorInfo = Game.getFloorInfo(state);
   document.getElementById('shop-title').textContent = 'The Ink & Quill Cart';
   document.getElementById('shop-floor-info').textContent = `Floor ${floorInfo.num} — ${Game.PAGE_NAMES[state.page]} next`;
-  document.getElementById('shop-gold').textContent = `${state.gold} gold`;
+  document.getElementById('shop-gold').innerHTML = `<span class="shop-gold-amount">${state.gold}</span> gold`;
 
   const container = document.getElementById('shop-items');
   container.innerHTML = '';
@@ -1003,26 +1109,30 @@ function renderShop() {
     const canAfford = state.gold >= item.cost;
     const div = document.createElement('div');
     div.className = 'shop-item' + (item.sold ? ' sold' : '') + (!canAfford && !item.sold ? ' cant-afford' : '');
+    div.dataset.type = item.type;
+    if (item.type === 'charm' && item.data.rarity) div.dataset.rarity = item.data.rarity;
 
     let typeName = item.type.replace('_', ' ');
-    let name = '', desc = '', flavor = '';
+    let name = '', desc = '', flavor = '', icon = SHOP_ICONS[item.type] || '•';
 
     switch (item.type) {
       case 'charm':
         name = item.data.name;
         desc = item.data.desc;
         flavor = item.data.flavor;
-        typeName = `charm · ${item.data.rarity}`;
+        typeName = item.data.rarity;
         break;
-      case 'die':
+      case 'die_enchant':
         name = item.data.name;
-        desc = `Faces: ${item.data.faces.join(' ')} — ${item.data.flavor}`;
-        flavor = item.data.bonusChips ? `+${item.data.bonusChips} chips per letter` : item.data.bonusMult ? `+${item.data.bonusMult} mult per word` : '';
+        desc = item.data.desc;
+        flavor = item.data.flavor;
+        typeName = 'enchantment';
         break;
       case 'remove_die':
-        name = 'Bag Surgery';
+        name = item.data.name;
         desc = 'Remove a standard die from your bag.';
         flavor = `Current bag: ${state.diceBag.length} dice`;
+        typeName = 'bag surgery';
         break;
       case 'ink_card':
         name = item.data.name;
@@ -1032,26 +1142,33 @@ function renderShop() {
         break;
       case 'length_upgrade':
         name = item.data.name;
-        desc = `${item.data.length}-letter words gain +1 base mult (×${GameDice.LENGTH_MULT[item.data.length] || 1}+${item.data.currentBonus} → ×${GameDice.LENGTH_MULT[item.data.length] || 1}+${item.data.newBonus})`;
+        desc = `${item.data.length}-letter words: +1 mult (×${GameDice.LENGTH_MULT[item.data.length] || 1}+${item.data.currentBonus} → ×${GameDice.LENGTH_MULT[item.data.length] || 1}+${item.data.newBonus})`;
         flavor = item.data.flavor;
         typeName = 'word upgrade';
         break;
       case 'die_upgrade':
         name = item.data.name;
-        desc = `Pick a die in your bag — it gains +${item.data.chipBonus} chips permanently`;
+        desc = `Pick a die — +${item.data.chipBonus} chips permanently`;
         flavor = item.data.flavor;
         typeName = 'die upgrade';
         break;
     }
 
+    const costDisplay = item.sold
+      ? '<span class="shop-cost-sold">SOLD</span>'
+      : `<span class="shop-cost-badge">${item.cost}g</span>`;
+
     div.innerHTML = `
+      <div class="shop-item-icon">${icon}</div>
       <div class="shop-item-info">
-        <div class="shop-item-type">${typeName}</div>
-        <div class="shop-item-name">${name}</div>
+        <div class="shop-item-header">
+          <span class="shop-item-name">${name}</span>
+          <span class="shop-item-type">${typeName}</span>
+        </div>
         <div class="shop-item-desc">${desc}</div>
         ${flavor ? `<div class="shop-item-flavor">"${flavor}"</div>` : ''}
       </div>
-      <div class="shop-item-cost">${item.sold ? 'SOLD' : item.cost + ' g'}</div>
+      <div class="shop-item-cost">${costDisplay}</div>
     `;
 
     if (!item.sold) {
@@ -1060,30 +1177,42 @@ function renderShop() {
     container.appendChild(div);
   });
 
-  // Show current charms
+  // Show current build
   const charmsEl = document.getElementById('shop-charms');
   charmsEl.innerHTML = '';
+
+  // Charms
   if (state.charms.length > 0) {
-    charmsEl.innerHTML = `<h3>Your Charms (${state.charms.length}/${state.maxCharms}) — click to sell</h3>`;
+    const header = document.createElement('div');
+    header.className = 'build-section-header';
+    header.innerHTML = `Charms <span class="build-count">${state.charms.length}/${state.maxCharms}</span>`;
+    charmsEl.appendChild(header);
+
     const grid = document.createElement('div');
-    grid.className = 'charms-grid';
+    grid.className = 'build-charms-grid';
     state.charms.forEach((charm, i) => {
       const refund = Math.ceil(charm.cost / 2);
       const card = document.createElement('div');
-      card.className = 'charm-card';
-      card.style.cursor = 'pointer';
-      card.innerHTML = `${charm.name} — ${charm.desc} <span style="color: var(--gold); font-size: 10px;">(sell +${refund}g)</span>`;
-      card.title = `Sell ${charm.name} for ${refund} gold`;
+      card.className = `build-charm-card rarity-${charm.rarity}`;
+      card.innerHTML = `
+        <div class="build-charm-name">${charm.name}</div>
+        <div class="build-charm-desc">${charm.desc}</div>
+        <div class="build-charm-sell">sell +${refund}g</div>
+      `;
       card.addEventListener('click', () => {
         const result = Game.sellCharm(state, i);
         if (result) {
+          GameAudio.playGold();
           showToast(`Sold ${result.name} for ${result.refund} gold`);
+          Storage.saveRun(state);
           renderShop();
         }
       });
       grid.appendChild(card);
     });
     charmsEl.appendChild(grid);
+  } else {
+    charmsEl.innerHTML = '<div class="build-empty">No charms yet — buy one above!</div>';
   }
 }
 
@@ -1094,17 +1223,22 @@ function buyItem(index) {
   const result = Game.buyShopItem(state, item);
   if (result.success) {
     if (result.pickDie) {
-      // Show die picker overlay
       item.sold = true;
-      showDiePicker(result.chipBonus);
+      if (result.enchant) {
+        showEnchantPicker(result.enchant);
+      } else {
+        showDiePicker(result.chipBonus);
+      }
       renderShop();
       return;
     }
     item.sold = true;
     showToast(result.msg);
+    GameAudio.playGold();
   } else {
     showToast(result.reason);
   }
+  Storage.saveRun(state);
   renderShop();
 }
 
@@ -1171,6 +1305,61 @@ function showDiePicker(chipBonus) {
   });
 }
 
+// ── Enchant Picker: choose which die to enchant ──
+function showEnchantPicker(enchant) {
+  const overlay = document.createElement('div');
+  overlay.className = 'overlay';
+  overlay.innerHTML = `
+    <div class="overlay-card" style="max-width: 440px;">
+      <h2>${enchant.name}</h2>
+      <p style="color: var(--cream-dim); font-size: 13px;">${enchant.desc} Choose a standard die to enchant.</p>
+      <div id="enchant-picker-grid" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; width: 100%;"></div>
+    </div>
+  `;
+  document.getElementById('app').appendChild(overlay);
+
+  const grid = document.getElementById('enchant-picker-grid');
+  const { LETTER_TIERS } = window.GameDice;
+
+  state.diceBag.forEach((die, i) => {
+    if (i >= 16) return;
+    const sampleLetter = die.faces[0] === 'Q' ? 'QU' : die.faces[0];
+    const tier = LETTER_TIERS[sampleLetter] || 'common';
+    const faces = die.faces.map(f => f === 'Q' ? 'Qu' : f).join(' ');
+    const alreadyEnchanted = die.type !== 'standard';
+
+    const div = document.createElement('div');
+    div.className = 'die-cell';
+    div.style.position = 'relative';
+    if (alreadyEnchanted) {
+      div.classList.add('die-' + die.type);
+      div.style.opacity = '0.4';
+      div.style.cursor = 'not-allowed';
+    } else {
+      div.style.cursor = 'pointer';
+    }
+
+    div.innerHTML = `
+      <span class="die-letter tier-${tier}" style="font-size: 14px;">${faces}</span>
+      ${alreadyEnchanted ? `<span style="position:absolute;bottom:1px;left:50%;transform:translateX(-50%);font-size:7px;color:var(--amber);">${die.type}</span>` : ''}
+    `;
+    div.title = alreadyEnchanted
+      ? `Already enchanted (${die.type})`
+      : `${faces} — click to enchant`;
+
+    if (!alreadyEnchanted) {
+      div.addEventListener('click', () => {
+        Game.enchantDie(state, i, enchant);
+        overlay.remove();
+        showToast(`${enchant.name} applied! [${faces}] is now ${enchant.type}`);
+        renderShop();
+      });
+    }
+
+    grid.appendChild(div);
+  });
+}
+
 function leaveShop() {
   state.phase = 'playing';
 
@@ -1183,10 +1372,14 @@ function leaveShop() {
       showTwistReveal(state.activeTwist, () => {
         render();
         animateGridEntrance();
+        GameAudio.playDeal();
+        Storage.saveRun(state);
       });
     } else {
       render();
       animateGridEntrance();
+      GameAudio.playDeal();
+      Storage.saveRun(state);
     }
   } else if (state.page === 0) {
     // New floor — show floor intro
@@ -1195,17 +1388,25 @@ function leaveShop() {
       state.wordHistory = [];
       render();
       animateGridEntrance();
+      GameAudio.playDeal();
+      Storage.saveRun(state);
     });
   } else {
     Game.startRound(state);
     state.wordHistory = [];
     render();
     animateGridEntrance();
+    GameAudio.playDeal();
+    Storage.saveRun(state);
   }
 }
 
 // ── Game Over — with narrative ──
 function showGameOver() {
+  Storage.clearRun();
+  Storage.updateStats(state);
+  GameAudio.playGameOver();
+
   const r = state.pageResult;
   const floorInfo = Game.getFloorInfo(state);
   const deathQuote = pick(Game.NARRATOR.gameOver);
@@ -1235,6 +1436,10 @@ function showGameOver() {
 
 // ── Victory — with particles and narrative ──
 function showVictory() {
+  Storage.clearRun();
+  Storage.updateStats(state);
+  GameAudio.playVictory();
+
   const div = document.createElement('div');
   div.className = 'overlay';
   div.innerHTML = `
@@ -1265,6 +1470,14 @@ function showVictory() {
 
 function goToTitle() {
   state = Game.createGameState();
+  // Reset title screen buttons
+  const titleBtns = document.getElementById('title-buttons');
+  titleBtns.innerHTML = '<button class="btn btn-gold" id="start-btn" onclick="startGame()">Begin Writing</button>';
+  // Update stats display
+  const stats = Storage.loadStats();
+  if (stats.runsPlayed > 0) {
+    document.getElementById('title-stats').textContent = `${stats.runsPlayed} runs · Best floor: ${stats.bestFloor} · Best score: ${stats.bestScore}`;
+  }
   render();
 }
 
@@ -1292,6 +1505,137 @@ function showToast(msg) {
   toast._timer = setTimeout(() => { toast.style.opacity = '0'; }, 2500);
 }
 
+// ── Wild Card Picker (replaces prompt) ──
+function showWildPicker(cell, onPick) {
+  const overlay = document.createElement('div');
+  overlay.className = 'overlay';
+  overlay.id = 'wild-picker-overlay';
+  const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+  overlay.innerHTML = `
+    <div class="overlay-card" style="max-width: 340px;">
+      <h2>Wild Die!</h2>
+      <p style="color: var(--cream-dim); font-size: 13px;">Choose a letter:</p>
+      <div class="wild-picker-grid">
+        ${letters.map(l => `<button class="wild-letter-btn" data-letter="${l}">${l}</button>`).join('')}
+      </div>
+    </div>
+  `;
+  document.getElementById('app').appendChild(overlay);
+
+  overlay.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-letter]');
+    if (btn) {
+      cell.wildLetter = btn.dataset.letter;
+      overlay.remove();
+      onPick();
+    }
+  });
+}
+
+// ── Pause Menu ──
+function showPause() {
+  if (state.phase !== 'playing' || scoringAnimationActive) return;
+  if (document.getElementById('pause-overlay')) return;
+
+  const div = document.createElement('div');
+  div.className = 'overlay';
+  div.id = 'pause-overlay';
+  div.innerHTML = `
+    <div class="overlay-card" style="max-width: 320px;">
+      <h2>Paused</h2>
+      <div style="display: flex; flex-direction: column; gap: 10px; width: 100%; align-items: center;">
+        <button class="btn btn-gold" onclick="closePause()">Resume</button>
+        <button class="btn btn-small" onclick="closePause(); showSettings();">Settings</button>
+        <button class="btn btn-small btn-red" onclick="confirmQuit()">Quit Run</button>
+      </div>
+    </div>
+  `;
+  document.getElementById('app').appendChild(div);
+}
+
+function closePause() {
+  const el = document.getElementById('pause-overlay');
+  if (el) el.remove();
+}
+
+function confirmQuit() {
+  const el = document.getElementById('pause-overlay');
+  if (!el) return;
+  el.querySelector('.overlay-card').innerHTML = `
+    <h2>Quit Run?</h2>
+    <p style="color: var(--cream-dim); font-size: 14px; text-align: center;">Your progress will be lost.</p>
+    <div style="display: flex; flex-direction: column; gap: 10px; width: 100%; align-items: center;">
+      <button class="btn btn-red" onclick="quitRun()">Quit</button>
+      <button class="btn btn-small" onclick="closePause(); showPause();">Cancel</button>
+    </div>
+  `;
+}
+
+function quitRun() {
+  Storage.clearRun();
+  Storage.updateStats(state);
+  closePause();
+  goToTitle();
+}
+
+// ── Settings Overlay ──
+function showSettings() {
+  if (document.getElementById('settings-overlay')) return;
+
+  const s = Settings.getAll();
+  const div = document.createElement('div');
+  div.className = 'overlay';
+  div.id = 'settings-overlay';
+  div.innerHTML = `
+    <div class="overlay-card" style="max-width: 360px;">
+      <h2>Settings</h2>
+      <div class="settings-list">
+        <div class="settings-row">
+          <label>SFX Volume</label>
+          <input type="range" min="0" max="100" value="${Math.round(s.sfxVolume * 100)}" id="setting-sfx">
+        </div>
+        <div class="settings-row">
+          <label>Haptics</label>
+          <button class="settings-toggle ${s.hapticsOn ? 'on' : ''}" id="setting-haptics">${s.hapticsOn ? 'ON' : 'OFF'}</button>
+        </div>
+        <div class="settings-row">
+          <label>Animation Speed</label>
+          <button class="settings-toggle ${s.animSpeed === 2 ? 'on' : ''}" id="setting-anim">${s.animSpeed === 2 ? 'FAST' : 'NORMAL'}</button>
+        </div>
+      </div>
+      <button class="btn btn-gold" onclick="closeSettings()">Done</button>
+    </div>
+  `;
+  document.getElementById('app').appendChild(div);
+
+  // Wire up controls
+  document.getElementById('setting-sfx').addEventListener('input', (e) => {
+    Settings.set('sfxVolume', e.target.value / 100);
+  });
+  document.getElementById('setting-haptics').addEventListener('click', (e) => {
+    const on = !Settings.get('hapticsOn');
+    Settings.set('hapticsOn', on);
+    e.target.textContent = on ? 'ON' : 'OFF';
+    e.target.classList.toggle('on', on);
+  });
+  document.getElementById('setting-anim').addEventListener('click', (e) => {
+    const fast = Settings.get('animSpeed') !== 2;
+    Settings.set('animSpeed', fast ? 2 : 1);
+    e.target.textContent = fast ? 'FAST' : 'NORMAL';
+    e.target.classList.toggle('on', fast);
+  });
+}
+
+function closeSettings() {
+  const el = document.getElementById('settings-overlay');
+  if (el) el.remove();
+}
+
+// ── Animation speed helper ──
+function animDelay(ms) {
+  return ms / Settings.get('animSpeed');
+}
+
 // Global exports
 window.startGame = startGame;
 window.clearSelection = clearSelection;
@@ -1301,6 +1645,13 @@ window.endRoundEarly = endRoundEarly;
 window.proceedFromResult = proceedFromResult;
 window.leaveShop = leaveShop;
 window.goToTitle = goToTitle;
+window.showPause = showPause;
+window.closePause = closePause;
+window.confirmQuit = confirmQuit;
+window.quitRun = quitRun;
+window.showSettings = showSettings;
+window.closeSettings = closeSettings;
+window.resumeGame = resumeGame;
 
 // Start
 document.addEventListener('DOMContentLoaded', init);

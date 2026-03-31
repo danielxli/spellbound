@@ -115,37 +115,42 @@ function areAdjacent(r1, c1, r2, c2) {
   return dr <= 1 && dc <= 1 && !(dr === 0 && dc === 0);
 }
 
-// Special dice types for the shop
-const SPECIAL_DICE = {
+// Special die enchantments — applied to an existing die (keeps its faces)
+const DIE_ENCHANTMENTS = {
   ember: {
-    name: 'Ember Die',
-    flavor: 'Warm to the touch',
+    name: 'Ember Enchantment',
+    flavor: 'The die grows warm to the touch.',
+    desc: 'Enchant a die: +5 chips per letter.',
     type: 'ember',
     bonusChips: 5,
     bonusMult: 0,
-    cost: 6
+    bonusGold: 0,
+    cost: 5
   },
   resonant: {
-    name: 'Resonant Die',
-    flavor: 'Hums when you hold it',
+    name: 'Resonant Enchantment',
+    flavor: 'The die hums when you hold it.',
+    desc: 'Enchant a die: +2 mult per word.',
     type: 'resonant',
     bonusChips: 0,
     bonusMult: 2,
-    cost: 7
+    bonusGold: 0,
+    cost: 8
   },
   gilded: {
-    name: 'Gilded Die',
-    flavor: 'Flecked with gold leaf',
+    name: 'Gilded Enchantment',
+    flavor: 'Gold leaf clings to every face.',
+    desc: 'Enchant a die: +2 gold per letter.',
     type: 'gilded',
     bonusChips: 0,
     bonusMult: 0,
     bonusGold: 2,
-    cost: 5
+    cost: 4
   }
 };
 
 window.GameDice = {
   STANDARD_DICE, LETTER_TIERS, LETTER_CHIPS, LENGTH_MULT,
   getWordLengthMult, createStandardBag, rollDie, dealGrid,
-  rerollCells, shakeGrid, areAdjacent, SPECIAL_DICE
+  rerollCells, shakeGrid, areAdjacent, DIE_ENCHANTMENTS
 };
