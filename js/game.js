@@ -197,6 +197,30 @@ const ALL_CHARMS = [
     desc: '+1 mult for every 5 unique words played this run.',
     scaling: true,
     effect: (ctx) => { ctx.bonusMult += Math.floor(ctx.uniqueWordsPlayed / 5); } },
+  // Retrigger — letters score twice
+  { id: 'echo_chamber', name: 'Echo Chamber', flavor: 'Every word reverberates.', rarity: 'rare', cost: 8,
+    desc: '1 random letter in each word scores its chips twice.',
+    effect: (ctx) => { ctx.retriggerCount += 1; } },
+  { id: 'double_take', name: 'Double Take', flavor: 'Wait — read that again.', rarity: 'legendary', cost: 11,
+    desc: '2 random letters in each word score their chips twice.',
+    effect: (ctx) => { ctx.retriggerCount += 2; } },
+  // Penalty tradeoff — powerful but restrictive
+  { id: 'haiku_master', name: 'Haiku Master', flavor: 'In three syllables, the world.', rarity: 'rare', cost: 4,
+    desc: 'x4 mult, but only on 3-letter words. 4+ letter words get x0.5 mult.',
+    penalty: true,
+    effect: (ctx) => { if (ctx.word.length === 3) ctx.multMultiplier *= 4; else ctx.multMultiplier *= 0.5; } },
+  { id: 'speed_reader', name: 'Speed Reader', flavor: 'No time for long words.', rarity: 'rare', cost: 5,
+    desc: 'x3 mult, but you only get 3 submissions per round.',
+    penalty: true,
+    effect: (ctx) => { ctx.multMultiplier *= 3; } },
+  { id: 'minimalist', name: 'Minimalist', flavor: 'Less is more. Much more.', rarity: 'uncommon', cost: 4,
+    desc: 'x2 mult, but words over 5 letters score at half.',
+    penalty: true,
+    effect: (ctx) => { if (ctx.word.length <= 5) ctx.multMultiplier *= 2; else ctx.multMultiplier *= 0.5; } },
+  // Gold conversion
+  { id: 'golden_tongue', name: 'Golden Tongue', flavor: 'Money talks.', rarity: 'rare', cost: 8,
+    desc: '+1 chip for every gold you have.',
+    effect: (ctx) => { ctx.bonusChips += ctx.gold; } },
   // Legendary — game-changers
   { id: 'masterwork', name: 'The Masterwork', flavor: 'Only for those who demand perfection.', rarity: 'legendary', cost: 10,
     desc: 'If every word this round is 5+ letters, gain x5 mult on the last word.',
@@ -281,6 +305,7 @@ function scoreWord(word, cells, gameState) {
     word, cells,
     wordIndex: gameState.wordsThisRound.length,
     bonusChips: 0, bonusMult: 0, multMultiplier: 1, bonusGold: 0,
+    retriggerCount: 0, // number of random letters that score twice
     uniqueStarts: new Set(gameState.wordsThisRound.map(w => w[0]).concat(word[0])).size,
     prevWordLength: gameState.wordsThisRound.length > 0 ? gameState.wordsThisRound[gameState.wordsThisRound.length - 1].length : 0,
     isLastWord: gameState.submissionsLeft <= 1,
@@ -292,7 +317,8 @@ function scoreWord(word, cells, gameState) {
     usedLetters: gameState.usedLetters.size,
     totalLettersUsed: gameState.totalLettersUsed,
     pagesCleared: gameState.pagesCleared,
-    uniqueWordsPlayed: gameState.usedWords.size
+    uniqueWordsPlayed: gameState.usedWords.size,
+    gold: gameState.gold
   };
 
   const charmTriggers = []; // { name, desc, chipDelta, multDelta, multMultDelta }
@@ -313,6 +339,20 @@ function scoreWord(word, cells, gameState) {
     }
   }
 
+  // Apply retrigger — random letters score their chips again
+  let retriggerChips = 0;
+  const retriggeredLetters = [];
+  if (ctx.retriggerCount > 0) {
+    const indices = [...Array(letterDetails.length).keys()];
+    for (let i = indices.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [indices[i], indices[j]] = [indices[j], indices[i]]; }
+    for (let i = 0; i < Math.min(ctx.retriggerCount, letterDetails.length); i++) {
+      const ld = letterDetails[indices[i]];
+      retriggerChips += ld.chips;
+      ld.retriggered = true;
+      retriggeredLetters.push(ld.letter);
+    }
+  }
+
   // Die-based bonus mult and gold
   let dieBonusMult = 0;
   let dieBonusGold = 0;
@@ -321,7 +361,7 @@ function scoreWord(word, cells, gameState) {
     dieBonusGold += cell.die.bonusGold || 0;
   }
 
-  const totalChips = baseChips + ctx.bonusChips;
+  const totalChips = baseChips + ctx.bonusChips + retriggerChips;
   const totalMult = (baseMult + ctx.bonusMult + dieBonusMult) * ctx.multMultiplier;
   const score = Math.floor(totalChips * totalMult);
   const totalBonusGold = ctx.bonusGold + dieBonusGold;
@@ -329,12 +369,13 @@ function scoreWord(word, cells, gameState) {
   return {
     word, letterDetails,
     baseChips, baseMult,
-    bonusChips: ctx.bonusChips,
+    bonusChips: ctx.bonusChips + retriggerChips,
     bonusMult: ctx.bonusMult + dieBonusMult,
     multMultiplier: ctx.multMultiplier,
     totalChips, totalMult, score,
     bonusGold: totalBonusGold,
     charmTriggers,
+    retriggeredLetters,
     patterns: detectPatterns(word)
   };
 }
@@ -407,6 +448,11 @@ function startRound(state) {
   state.wordsThisRound = [];
   state.selectedCells = [];
   state.phase = 'playing';
+
+  // Apply Speed Reader penalty
+  if (state.charms.some(c => c.id === 'speed_reader')) {
+    state.submissionsLeft = 3;
+  }
 
   // Apply Librarian's Cat charm
   if (state.charms.some(c => c.id === 'librarians_cat')) {
