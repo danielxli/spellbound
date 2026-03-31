@@ -2,28 +2,28 @@
 
 // ── Floor definitions ──
 const FLOORS = [
-  { num: 1, name: 'The First Sentence', genre: 'Coming of Age', opening: 50, rising: 100, final: 200,
+  { num: 1, name: 'The First Sentence', genre: 'Coming of Age', opening: 50, rising: 75, final: 100,
     intro: 'The library door creaks open. Dust motes swirl in amber lamplight as you step inside. A blank notebook lies open on the nearest desk, its pages waiting.',
     opening_line: 'It was the kind of day that changed everything, though no one knew it yet.' },
-  { num: 2, name: 'The Plot Thickens', genre: 'Mystery', opening: 125, rising: 250, final: 500,
+  { num: 2, name: 'The Plot Thickens', genre: 'Mystery', opening: 150, rising: 225, final: 300,
     intro: 'The staircase spirals upward. On this floor, the shelves are darker, the shadows longer. A magnifying glass sits on a bloodstained desk.',
     opening_line: 'The detective stared at the letter. Three words. Three impossibly wrong words.' },
-  { num: 3, name: 'The Moonlit Moor', genre: 'Gothic Romance', opening: 300, rising: 600, final: 1250,
+  { num: 3, name: 'The Moonlit Moor', genre: 'Gothic Romance', opening: 400, rising: 600, final: 800,
     intro: 'Candles flicker in iron sconces. The books here are bound in velvet, their spines embossed with thorned roses. Something sighs behind the shelves.',
     opening_line: 'She had sworn never to return to Thornfield, and yet here she stood in the rain.' },
-  { num: 4, name: 'City of Whispers', genre: 'Thriller', opening: 750, rising: 1500, final: 3000,
+  { num: 4, name: 'City of Whispers', genre: 'Thriller', opening: 1000, rising: 1500, final: 2000,
     intro: 'The floor above is all glass and steel. Headlines scroll across the walls. Every book here is redacted, censored, classified.',
     opening_line: 'The phone rang at 3 AM. On the other end, a voice said only: "They know."' },
-  { num: 5, name: 'The Long Winter', genre: 'Epic Fantasy', opening: 1750, rising: 3500, final: 7000,
+  { num: 5, name: 'The Long Winter', genre: 'Epic Fantasy', opening: 2500, rising: 3750, final: 5000,
     intro: 'Frost creeps across the bookshelves. The volumes here are massive, leather-bound, ancient. A sword is embedded in the reading desk.',
     opening_line: 'The kingdom had forgotten magic, but magic had not forgotten the kingdom.' },
-  { num: 6, name: 'Palace of Mirrors', genre: 'Surrealism', opening: 4000, rising: 8000, final: 12000,
+  { num: 6, name: 'Palace of Mirrors', genre: 'Surrealism', opening: 5500, rising: 8250, final: 11000,
     intro: 'The geometry of this floor is wrong. Staircases lead sideways. Books read themselves aloud in languages that don\'t exist. A cat watches you with too many eyes.',
     opening_line: 'The clock struck thirteen and the fish began to speak in perfect iambic pentameter.' },
-  { num: 7, name: 'The Unwritten', genre: 'Metafiction', opening: 6000, rising: 12000, final: 18000,
+  { num: 7, name: 'The Unwritten', genre: 'Metafiction', opening: 10000, rising: 15000, final: 20000,
     intro: 'The shelves here are nearly empty. The few books that remain have no endings. One of them is about a writer climbing an endless library.',
     opening_line: 'The character looked up from the page and realized, with growing unease, that someone was reading.' },
-  { num: 8, name: 'The Last Chapter', genre: '???', opening: 10000, rising: 20000, final: 30000,
+  { num: 8, name: 'The Last Chapter', genre: '???', opening: 15000, rising: 22500, final: 30000,
     intro: 'The final floor. There is only one book here, open to its last page. The words shimmer and shift. You recognize your own handwriting.',
     opening_line: 'And so the writer reached the top of the library, and the library held its breath.' }
 ];
@@ -589,16 +589,7 @@ function advancePage(state) {
   }
 }
 
-function skipPage(state) {
-  // Award bookmark bonus (simplified: just gold for prototype)
-  state.gold += 8;
-  if (state.page < 2) {
-    state.page++;
-    // No shop after skip
-    return 'skipped';
-  }
-  return 'cannot_skip_final';
-}
+// skipPage removed
 
 // ── Shop ──
 
@@ -772,7 +763,7 @@ function useInkCard(state, cardIndex) {
 window.Game = {
   FLOORS, PAGE_NAMES, PAGE_GOLD, STORY_TWISTS, ALL_CHARMS, NARRATOR,
   createGameState, getTarget, getFloorInfo, startRound, submitWord,
-  endRound, advancePage, skipPage, generateShopItems, buyShopItem,
+  endRound, advancePage, generateShopItems, buyShopItem,
   upgradeDie, getDieUpgradeLevel, sellCharm, MAX_DIE_UPGRADES, DIE_UPGRADE_CHIPS,
   useInkCard, scoreWord, detectPatterns, hasDoubleLetter, hasConsonantRun,
   isBookend, isVowelHeavy, isAllUnique

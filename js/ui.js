@@ -517,12 +517,7 @@ function renderInkCards() {
 }
 
 function renderSkipButton() {
-  const el = document.getElementById('skip-row');
-  if (state.page < 2 && state.wordsThisRound.length === 0) {
-    el.innerHTML = `<button class="btn btn-small" onclick="doSkipPage()">Skip Page (+8 gold bookmark)</button>`;
-  } else {
-    el.innerHTML = '';
-  }
+  // Skip/bookmark removed
 }
 
 // ── Cell Click Handler ──
@@ -866,28 +861,6 @@ function finishRound() {
 
   state.wordHistory = [];
   render();
-}
-
-// ── Skip Page ──
-function doSkipPage() {
-  if (state.page >= 2) return;
-  showPageTurn(() => {
-    Game.skipPage(state);
-    state.page = Math.min(state.page, 2);
-    Game.startRound(state);
-    state.wordHistory = [];
-
-    // Show twist reveal if landing on final page
-    if (state.page === 2 && state.activeTwist) {
-      showTwistReveal(state.activeTwist, () => {
-        render();
-        animateGridEntrance();
-      });
-    } else {
-      render();
-      animateGridEntrance();
-    }
-  });
 }
 
 // ── Use Ink Card ──
@@ -1327,7 +1300,6 @@ window.doShakeGrid = doShakeGrid;
 window.endRoundEarly = endRoundEarly;
 window.proceedFromResult = proceedFromResult;
 window.leaveShop = leaveShop;
-window.doSkipPage = doSkipPage;
 window.goToTitle = goToTitle;
 
 // Start
