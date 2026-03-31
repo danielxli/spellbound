@@ -185,10 +185,14 @@ const ALL_CHARMS = [
     desc: '+1 mult for every 6+ letter word played this run.',
     scaling: true,
     effect: (ctx) => { ctx.bonusMult += ctx.longWordCount; } },
-  { id: 'ink_well', name: 'Ink Well', flavor: 'Fed by the beauty of language.', rarity: 'uncommon', cost: 5,
-    desc: '+1 mult for every 5 word patterns triggered this run.',
+  { id: 'ink_well', name: 'Ink Well', flavor: 'Fed by every letter you write.', rarity: 'uncommon', cost: 5,
+    desc: '+1 chip for every letter played this run.',
     scaling: true,
-    effect: (ctx) => { ctx.bonusMult += Math.floor(ctx.patternCount / 5); } },
+    effect: (ctx) => { ctx.bonusChips += ctx.totalLettersUsed; } },
+  { id: 'scribes_callus', name: "Scribe's Callus", flavor: 'The hand grows stronger with use.', rarity: 'uncommon', cost: 5,
+    desc: '+2 chips per word for each page cleared this run.',
+    scaling: true,
+    effect: (ctx) => { ctx.bonusChips += ctx.pagesCleared * 2; } },
   { id: 'vocabulary', name: 'Vocabulary', flavor: 'A broad command of the alphabet.', rarity: 'rare', cost: 7,
     desc: '+1 mult for every 5 unique letters used this run.',
     scaling: true,
@@ -285,7 +289,9 @@ function scoreWord(word, cells, gameState) {
     floorsCleared: gameState.floorsCleared,
     longWordCount: gameState.longWordCount,
     patternCount: gameState.patternCount,
-    usedLetters: gameState.usedLetters.size
+    usedLetters: gameState.usedLetters.size,
+    totalLettersUsed: gameState.totalLettersUsed,
+    pagesCleared: gameState.pagesCleared
   };
 
   const charmTriggers = []; // { name, desc, chipDelta, multDelta, multMultDelta }
@@ -342,8 +348,10 @@ function createGameState() {
     runScore: 0,
     usedWords: new Set(),    // all words used this run
     usedLetters: new Set(),  // all unique letters used this run
+    totalLettersUsed: 0,     // total letters played this run (not unique)
     patternCount: 0,         // total pattern triggers this run
     longWordCount: 0,        // total 6+ letter words this run
+    pagesCleared: 0,         // total pages cleared this run
 
     // Round state
     grid: null,
@@ -479,6 +487,7 @@ function submitWord(state) {
 
   // Track scaling charm stats
   for (const ch of word) state.usedLetters.add(ch);
+  state.totalLettersUsed += word.length;
   if (word.length >= 6) state.longWordCount++;
   state.patternCount += result.patterns.length;
 
@@ -497,6 +506,7 @@ function endRound(state) {
   const passed = state.roundScore >= target;
 
   if (passed) {
+    state.pagesCleared++;
     // Award gold
     const baseGold = PAGE_GOLD[state.page];
     const bonusGold = state.submissionsLeft * 2;
