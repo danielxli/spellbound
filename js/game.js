@@ -23,7 +23,7 @@ const FLOORS = [
   { num: 7, name: 'The Unwritten', genre: 'Metafiction', opening: 9000, rising: 18000, final: 35000,
     intro: 'The shelves here are nearly empty. The few books that remain have no endings. One of them is about a writer climbing an endless library.',
     opening_line: 'The character looked up from the page and realized, with growing unease, that someone was reading.' },
-  { num: 8, name: 'The Last Chapter', genre: '???', opening: 17500, rising: 35000, final: 75000,
+  { num: 8, name: 'The Last Chapter', genre: '???', opening: 20000, rising: 25000, final: 30000,
     intro: 'The final floor. There is only one book here, open to its last page. The words shimmer and shift. You recognize your own handwriting.',
     opening_line: 'And so the writer reached the top of the library, and the library held its breath.' }
 ];
