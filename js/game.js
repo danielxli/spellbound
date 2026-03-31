@@ -17,13 +17,13 @@ const FLOORS = [
   { num: 5, name: 'The Long Winter', genre: 'Epic Fantasy', opening: 1750, rising: 3500, final: 7000,
     intro: 'Frost creeps across the bookshelves. The volumes here are massive, leather-bound, ancient. A sword is embedded in the reading desk.',
     opening_line: 'The kingdom had forgotten magic, but magic had not forgotten the kingdom.' },
-  { num: 6, name: 'Palace of Mirrors', genre: 'Surrealism', opening: 4000, rising: 8000, final: 16000,
+  { num: 6, name: 'Palace of Mirrors', genre: 'Surrealism', opening: 4000, rising: 8000, final: 12000,
     intro: 'The geometry of this floor is wrong. Staircases lead sideways. Books read themselves aloud in languages that don\'t exist. A cat watches you with too many eyes.',
     opening_line: 'The clock struck thirteen and the fish began to speak in perfect iambic pentameter.' },
-  { num: 7, name: 'The Unwritten', genre: 'Metafiction', opening: 9000, rising: 18000, final: 35000,
+  { num: 7, name: 'The Unwritten', genre: 'Metafiction', opening: 6000, rising: 12000, final: 18000,
     intro: 'The shelves here are nearly empty. The few books that remain have no endings. One of them is about a writer climbing an endless library.',
     opening_line: 'The character looked up from the page and realized, with growing unease, that someone was reading.' },
-  { num: 8, name: 'The Last Chapter', genre: '???', opening: 20000, rising: 25000, final: 30000,
+  { num: 8, name: 'The Last Chapter', genre: '???', opening: 10000, rising: 20000, final: 30000,
     intro: 'The final floor. There is only one book here, open to its last page. The words shimmer and shift. You recognize your own handwriting.',
     opening_line: 'And so the writer reached the top of the library, and the library held its breath.' }
 ];
