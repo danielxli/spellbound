@@ -1016,6 +1016,10 @@ function showPageResult() {
         <span class="reward-label">${r.bonusGold / 2} unused submission${r.bonusGold / 2 !== 1 ? 's' : ''} × 2</span>
         <span class="reward-value">+${r.bonusGold}</span>
       </div>
+      ${r.interest > 0 ? `<div class="gold-reward-row" id="gr-interest">
+        <span class="reward-label">Interest (${Math.floor((state.gold - r.totalGold) / 5 * 5)}g × $1/5)</span>
+        <span class="reward-value">+${r.interest}</span>
+      </div>` : ''}
       <div class="gold-reward-total" id="gr-total">
         <span class="reward-label">Gold earned</span>
         <span class="reward-value">+${r.totalGold}</span>
@@ -1052,6 +1056,14 @@ function showPageResult() {
     const el = document.getElementById('gr-bonus');
     if (el) el.classList.add('shown');
   }, t);
+
+  if (r.interest > 0) {
+    t += step;
+    setTimeout(() => {
+      const el = document.getElementById('gr-interest');
+      if (el) el.classList.add('shown');
+    }, t);
+  }
 
   t += step + 100;
   setTimeout(() => {

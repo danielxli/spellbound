@@ -120,12 +120,12 @@ const DIE_ENCHANTMENTS = {
   ember: {
     name: 'Ember Enchantment',
     flavor: 'The die grows warm to the touch.',
-    desc: 'Enchant a die: +5 chips per letter.',
+    desc: 'Enchant a die: +10 chips per letter.',
     type: 'ember',
-    bonusChips: 5,
+    bonusChips: 10,
     bonusMult: 0,
     bonusGold: 0,
-    cost: 5
+    cost: 7
   },
   resonant: {
     name: 'Resonant Enchantment',

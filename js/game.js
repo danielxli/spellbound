@@ -96,7 +96,7 @@ const NARRATOR = {
 };
 
 const PAGE_NAMES = ['Opening Page', 'Rising Page', 'Final Page'];
-const PAGE_GOLD = [4, 6, 8]; // base gold per page type
+const PAGE_GOLD = [6, 8, 10]; // base gold per page type
 
 // ── Story Twists (Final Page modifiers) ──
 const STORY_TWISTS = [
@@ -554,13 +554,15 @@ function endRound(state) {
     // Award gold
     const baseGold = PAGE_GOLD[state.page];
     const bonusGold = state.submissionsLeft * 2;
-    state.gold += baseGold + bonusGold;
+    const interest = Math.min(5, Math.floor(state.gold / 5)); // +1 per 5 held, max +5
+    state.gold += baseGold + bonusGold + interest;
 
     return {
       passed: true,
       baseGold,
       bonusGold,
-      totalGold: baseGold + bonusGold,
+      interest,
+      totalGold: baseGold + bonusGold + interest,
       roundScore: state.roundScore,
       target
     };
@@ -637,7 +639,7 @@ function generateShopItems(state) {
 
   // ── 1-2 Charms (weighted by rarity, scaling with floor) ──
   const availableCharms = ALL_CHARMS.filter(c => !state.charms.some(owned => owned.id === c.id));
-  const charmCount = state.charms.length >= state.maxCharms ? 0 : Math.min(2, availableCharms.length);
+  const charmCount = Math.min(2, availableCharms.length);
   const picked = new Set();
   for (let i = 0; i < charmCount; i++) {
     const charm = rollCharmByRarity(availableCharms, state.floor, picked);
@@ -709,12 +711,12 @@ function shuffle(arr) {
 
 function buyShopItem(state, item) {
   if (state.gold < item.cost) return { success: false, reason: 'Not enough gold.' };
+  if (item.type === 'charm' && state.charms.length >= state.maxCharms) return { success: false, reason: 'Charm slots full! Sell one first.' };
 
   state.gold -= item.cost;
 
   switch (item.type) {
     case 'charm':
-      if (state.charms.length >= state.maxCharms) return { success: false, reason: 'Charm slots full!' };
       state.charms.push(item.data);
       return { success: true, msg: `Acquired ${item.data.name}!` };
 
