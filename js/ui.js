@@ -488,11 +488,11 @@ function renderCharms() {
       } else if (charm.id === 'wordsmith') {
         label += ` (+${state.longWordCount}m)`;
       } else if (charm.id === 'ink_well') {
-        label += ` (+${state.totalLettersUsed}c)`;
+        label += ` (+${state.usedLetters.size}c)`;
       } else if (charm.id === 'scribes_callus') {
         label += ` (+${state.pagesCleared * 2}c)`;
       } else if (charm.id === 'vocabulary') {
-        label += ` (+${Math.floor(state.usedLetters.size / 5)}m)`;
+        label += ` (+${Math.floor(state.usedWords.size / 5)}m)`;
       }
     }
 

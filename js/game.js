@@ -185,18 +185,18 @@ const ALL_CHARMS = [
     desc: '+1 mult for every 6+ letter word played this run.',
     scaling: true,
     effect: (ctx) => { ctx.bonusMult += ctx.longWordCount; } },
-  { id: 'ink_well', name: 'Ink Well', flavor: 'Fed by every letter you write.', rarity: 'uncommon', cost: 5,
-    desc: '+1 chip for every letter played this run.',
+  { id: 'ink_well', name: 'Ink Well', flavor: 'Fed by every new letter you master.', rarity: 'uncommon', cost: 5,
+    desc: '+1 chip for every unique letter used this run.',
     scaling: true,
-    effect: (ctx) => { ctx.bonusChips += ctx.totalLettersUsed; } },
+    effect: (ctx) => { ctx.bonusChips += ctx.usedLetters; } },
   { id: 'scribes_callus', name: "Scribe's Callus", flavor: 'The hand grows stronger with use.', rarity: 'uncommon', cost: 5,
     desc: '+2 chips per word for each page cleared this run.',
     scaling: true,
     effect: (ctx) => { ctx.bonusChips += ctx.pagesCleared * 2; } },
-  { id: 'vocabulary', name: 'Vocabulary', flavor: 'A broad command of the alphabet.', rarity: 'rare', cost: 7,
-    desc: '+1 mult for every 5 unique letters used this run.',
+  { id: 'vocabulary', name: 'Vocabulary', flavor: 'Every word you know makes you stronger.', rarity: 'rare', cost: 7,
+    desc: '+1 mult for every 5 unique words played this run.',
     scaling: true,
-    effect: (ctx) => { ctx.bonusMult += Math.floor(ctx.usedLetters / 5); } },
+    effect: (ctx) => { ctx.bonusMult += Math.floor(ctx.uniqueWordsPlayed / 5); } },
   // Legendary — game-changers
   { id: 'masterwork', name: 'The Masterwork', flavor: 'Only for those who demand perfection.', rarity: 'legendary', cost: 10,
     desc: 'If every word this round is 5+ letters, gain x5 mult on the last word.',
@@ -291,7 +291,8 @@ function scoreWord(word, cells, gameState) {
     patternCount: gameState.patternCount,
     usedLetters: gameState.usedLetters.size,
     totalLettersUsed: gameState.totalLettersUsed,
-    pagesCleared: gameState.pagesCleared
+    pagesCleared: gameState.pagesCleared,
+    uniqueWordsPlayed: gameState.usedWords.size
   };
 
   const charmTriggers = []; // { name, desc, chipDelta, multDelta, multMultDelta }
