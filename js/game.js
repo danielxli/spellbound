@@ -113,44 +113,26 @@ const STORY_TWISTS = [
 
 // ── Charm Definitions ──
 const ALL_CHARMS = [
-  // Common
+  // Common — cheap, always useful, additive
   { id: 'rough_draft', name: 'Rough Draft', flavor: 'Always knows where you left off.', rarity: 'common', cost: 3,
-    desc: 'Your first word each round gains +10 chips.',
-    effect: (ctx) => { if (ctx.wordIndex === 0) ctx.bonusChips += 10; } },
+    desc: 'Your first word each round gains x2 mult.',
+    effect: (ctx) => { if (ctx.wordIndex === 0) ctx.multMultiplier *= 2; } },
   { id: 'reading_glasses', name: 'Reading Glasses', flavor: 'The vowels practically glow.', rarity: 'common', cost: 3,
     desc: '+3 chips for every vowel in the word.',
     effect: (ctx) => { const vowels = ctx.word.split('').filter(c => 'AEIOU'.includes(c)).length; ctx.bonusChips += vowels * 3; } },
-  { id: 'dog_eared', name: 'Dog-Eared Page', flavor: 'Always knows where you left off.', rarity: 'common', cost: 3,
-    desc: '+1 mult for every unique starting letter across your words this round.',
-    effect: (ctx) => { ctx.bonusMult += ctx.uniqueStarts; } },
+  { id: 'dog_eared', name: 'Dog-Eared Page', flavor: 'Every word opens a new chapter.', rarity: 'common', cost: 3,
+    desc: '+2 mult for every unique starting letter across your words this round.',
+    effect: (ctx) => { ctx.bonusMult += ctx.uniqueStarts * 2; } },
   { id: 'double_vision', name: 'Double Vision', flavor: 'Seeing double is a feature.', rarity: 'common', cost: 4,
-    desc: 'Words with double letters gain +3 mult.',
-    effect: (ctx) => { if (hasDoubleLetter(ctx.word)) ctx.bonusMult += 3; } },
-  // Uncommon
-  { id: 'thesaurus', name: 'Thesaurus', flavor: 'Why use a small word when a diminutive one will do?', rarity: 'uncommon', cost: 6,
-    desc: '6+ letter words gain x3 mult.',
-    effect: (ctx) => { if (ctx.word.length >= 6) ctx.multMultiplier *= 3; } },
-  { id: 'bookend_clasp', name: 'Bookend Clasp', flavor: 'Everything comes full circle.', rarity: 'uncommon', cost: 5,
-    desc: 'Bookend words (same first & last letter) gain +8 chips and +2 mult.',
-    effect: (ctx) => { if (ctx.word[0] === ctx.word[ctx.word.length - 1]) { ctx.bonusChips += 8; ctx.bonusMult += 2; } } },
-  { id: 'inkpot', name: 'Inkpot of Fortune', flavor: 'Drips gold when it writes.', rarity: 'uncommon', cost: 6,
-    desc: 'Earn +2 gold per word submitted.',
-    effect: (ctx) => { ctx.bonusGold += 2; } },
-  // Rare
-  { id: 'consonant_crunch', name: 'Consonant Crunch', flavor: 'Who needs vowels?', rarity: 'rare', cost: 7,
-    desc: 'Words with a consonant run (3+ in a row) gain x4 mult.',
-    effect: (ctx) => { if (hasConsonantRun(ctx.word)) ctx.multMultiplier *= 4; } },
-  { id: 'synonym_ribbon', name: 'Synonym Ribbon', flavor: 'Same meaning, different magic.', rarity: 'rare', cost: 7,
-    desc: 'If current word is same length as previous word, gain +15 chips.',
-    effect: (ctx) => { if (ctx.prevWordLength === ctx.word.length && ctx.prevWordLength > 0) ctx.bonusChips += 15; } },
-  // Common (continued)
+    desc: 'Words with double letters gain +4 mult.',
+    effect: (ctx) => { if (hasDoubleLetter(ctx.word)) ctx.bonusMult += 4; } },
   { id: 'iron_nib', name: 'Iron Nib', flavor: 'Writes with authority.', rarity: 'common', cost: 3,
     desc: '+2 chips for every consonant in the word.',
     effect: (ctx) => { const cons = ctx.word.split('').filter(c => !'AEIOU'.includes(c)).length; ctx.bonusChips += cons * 2; } },
   { id: 'page_turner', name: 'Page Turner', flavor: 'Can\'t put it down.', rarity: 'common', cost: 4,
-    desc: 'Each word scores +5 chips more than the last this round.',
-    effect: (ctx) => { ctx.bonusChips += ctx.wordIndex * 5; } },
-  // Uncommon (continued)
+    desc: 'Each word scores +8 chips more than the last this round.',
+    effect: (ctx) => { ctx.bonusChips += ctx.wordIndex * 8; } },
+  // Uncommon — moderate cost, conditional multipliers
   { id: 'overwriter', name: 'Overwriter', flavor: 'More is more.', rarity: 'uncommon', cost: 5,
     desc: '5+ letter words gain x2 mult.',
     effect: (ctx) => { if (ctx.word.length >= 5) ctx.multMultiplier *= 2; } },
@@ -160,23 +142,38 @@ const ALL_CHARMS = [
   { id: 'chapter_break', name: 'Chapter Break', flavor: 'And then everything changed.', rarity: 'uncommon', cost: 6,
     desc: 'Your last submission each round gains x2 mult.',
     effect: (ctx) => { if (ctx.isLastWord) ctx.multMultiplier *= 2; } },
-  // Rare (continued)
+  { id: 'bookend_clasp', name: 'Bookend Clasp', flavor: 'Everything comes full circle.', rarity: 'uncommon', cost: 5,
+    desc: 'Bookend words (same first & last letter) gain +10 chips and x2 mult.',
+    effect: (ctx) => { if (ctx.word[0] === ctx.word[ctx.word.length - 1]) { ctx.bonusChips += 10; ctx.multMultiplier *= 2; } } },
+  { id: 'thesaurus', name: 'Thesaurus', flavor: 'Why use a small word when a diminutive one will do?', rarity: 'uncommon', cost: 6,
+    desc: '6+ letter words gain x3 mult.',
+    effect: (ctx) => { if (ctx.word.length >= 6) ctx.multMultiplier *= 3; } },
+  { id: 'inkpot', name: 'Inkpot of Fortune', flavor: 'Drips gold when it writes.', rarity: 'uncommon', cost: 6,
+    desc: 'Earn +3 gold per word submitted.',
+    effect: (ctx) => { ctx.bonusGold += 3; } },
+  // Rare — expensive, powerful multipliers
+  { id: 'consonant_crunch', name: 'Consonant Crunch', flavor: 'Who needs vowels?', rarity: 'rare', cost: 7,
+    desc: 'Words with a consonant run (3+ in a row) gain x3 mult.',
+    effect: (ctx) => { if (hasConsonantRun(ctx.word)) ctx.multMultiplier *= 3; } },
+  { id: 'synonym_ribbon', name: 'Synonym Ribbon', flavor: 'Same meaning, different magic.', rarity: 'rare', cost: 7,
+    desc: 'If current word is same length as previous word, gain x2 mult.',
+    effect: (ctx) => { if (ctx.prevWordLength === ctx.word.length && ctx.prevWordLength > 0) ctx.multMultiplier *= 2; } },
   { id: 'ancient_tome', name: 'Ancient Tome', flavor: 'The words of those who came before.', rarity: 'rare', cost: 8,
     desc: '7+ letter words gain x3 mult.',
     effect: (ctx) => { if (ctx.word.length >= 7) ctx.multMultiplier *= 3; } },
   { id: 'red_ink', name: 'Red Ink', flavor: 'Bleeds power.', rarity: 'rare', cost: 7,
-    desc: 'Words using rare/epic/legendary letters gain +4 mult.',
+    desc: 'Words using rare/epic/legendary letters gain x2 mult.',
     effect: (ctx) => {
       const hasRare = ctx.cells.some(c => {
         const tier = (GameDice.LETTER_TIERS[c.letter] || 'common');
         return tier === 'rare' || tier === 'epic' || tier === 'legendary';
       });
-      if (hasRare) ctx.bonusMult += 4;
+      if (hasRare) ctx.multMultiplier *= 2;
     } },
   { id: 'crescendo', name: 'Crescendo', flavor: 'Building to something magnificent.', rarity: 'rare', cost: 8,
-    desc: 'Each word this round gains +1 mult more than the last.',
-    effect: (ctx) => { ctx.bonusMult += ctx.wordIndex; } },
-  // Legendary
+    desc: 'Each word this round gains +2 mult more than the last.',
+    effect: (ctx) => { ctx.bonusMult += ctx.wordIndex * 2; } },
+  // Legendary — game-changers
   { id: 'masterwork', name: 'The Masterwork', flavor: 'Only for those who demand perfection.', rarity: 'legendary', cost: 10,
     desc: 'If every word this round is 5+ letters, gain x5 mult on the last word.',
     effect: (ctx) => { if (ctx.isLastWord && ctx.allWordsLong) ctx.multMultiplier *= 5; } },
@@ -634,12 +631,21 @@ function buyShopItem(state, item) {
   }
 }
 
-// Apply die upgrade to a specific die in the bag
+// Apply die upgrade to a specific die in the bag (max 3 upgrades per die = +15)
+const MAX_DIE_UPGRADES = 3;
+const DIE_UPGRADE_CHIPS = 5;
+
 function upgradeDie(state, dieIndex, chipBonus) {
   const die = state.diceBag[dieIndex];
   if (!die) return false;
+  const currentLevel = Math.round((die.bonusChips || 0) / DIE_UPGRADE_CHIPS);
+  if (currentLevel >= MAX_DIE_UPGRADES) return false;
   die.bonusChips = (die.bonusChips || 0) + chipBonus;
   return true;
+}
+
+function getDieUpgradeLevel(die) {
+  return Math.round((die.bonusChips || 0) / DIE_UPGRADE_CHIPS);
 }
 
 function useInkCard(state, cardIndex) {
@@ -666,7 +672,8 @@ function useInkCard(state, cardIndex) {
 window.Game = {
   FLOORS, PAGE_NAMES, PAGE_GOLD, STORY_TWISTS, ALL_CHARMS, NARRATOR,
   createGameState, getTarget, getFloorInfo, startRound, submitWord,
-  endRound, advancePage, skipPage, generateShopItems, buyShopItem, upgradeDie,
+  endRound, advancePage, skipPage, generateShopItems, buyShopItem,
+  upgradeDie, getDieUpgradeLevel, MAX_DIE_UPGRADES, DIE_UPGRADE_CHIPS,
   useInkCard, scoreWord, detectPatterns, hasDoubleLetter, hasConsonantRun,
   isBookend, isVowelHeavy, isAllUnique
 };

@@ -1114,7 +1114,7 @@ function showDiePicker(chipBonus) {
   overlay.innerHTML = `
     <div class="overlay-card" style="max-width: 440px;">
       <h2>Sharpen a Die</h2>
-      <p style="color: var(--cream-dim); font-size: 13px;">Choose a die to upgrade. It gains +${chipBonus} chips permanently on every face.</p>
+      <p style="color: var(--cream-dim); font-size: 13px;">Choose a die to upgrade (+${chipBonus} chips). Max ${Game.MAX_DIE_UPGRADES} upgrades per die.</p>
       <div id="die-picker-grid" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; width: 100%;"></div>
     </div>
   `;
@@ -1123,35 +1123,48 @@ function showDiePicker(chipBonus) {
   const grid = document.getElementById('die-picker-grid');
   const { LETTER_CHIPS, LETTER_TIERS } = window.GameDice;
 
-  // Show all dice in the bag (first 16)
   state.diceBag.forEach((die, i) => {
-    if (i >= 16) return; // only show grid-eligible dice
+    if (i >= 16) return;
     const sampleLetter = die.faces[0] === 'Q' ? 'QU' : die.faces[0];
     const tier = LETTER_TIERS[sampleLetter] || 'common';
-    const baseChips = LETTER_CHIPS[sampleLetter] || 2;
     const currentBonus = die.bonusChips || 0;
+    const level = Game.getDieUpgradeLevel(die);
+    const maxed = level >= Game.MAX_DIE_UPGRADES;
     const faces = die.faces.map(f => f === 'Q' ? 'Qu' : f).join(' ');
+    const pips = '★'.repeat(level) + '☆'.repeat(Game.MAX_DIE_UPGRADES - level);
 
     const div = document.createElement('div');
     div.className = 'die-cell';
-    div.style.cursor = 'pointer';
     div.style.position = 'relative';
     if (currentBonus > 0) {
       div.style.borderColor = '#d4a04a';
       div.style.boxShadow = '0 0 8px rgba(212,160,74,0.3)';
     }
-    div.innerHTML = `
-      <span class="die-letter tier-${tier}" style="font-size: 16px;">${faces}</span>
-      <span class="die-chips">${currentBonus > 0 ? `+${currentBonus}` : ''}</span>
-    `;
-    div.title = `Faces: ${faces} | Current bonus: +${currentBonus} chips | Will become: +${currentBonus + chipBonus}`;
+    if (maxed) {
+      div.style.opacity = '0.4';
+      div.style.cursor = 'not-allowed';
+    } else {
+      div.style.cursor = 'pointer';
+    }
 
-    div.addEventListener('click', () => {
-      Game.upgradeDie(state, i, chipBonus);
-      overlay.remove();
-      showToast(`Die upgraded! +${die.bonusChips} chips on [${faces}]`);
-      renderShop();
-    });
+    div.innerHTML = `
+      <span class="die-letter tier-${tier}" style="font-size: 14px;">${faces}</span>
+      <span class="die-chips">${currentBonus > 0 ? `+${currentBonus}` : ''}</span>
+      <span style="position:absolute;bottom:1px;left:50%;transform:translateX(-50%);font-size:8px;color:#d4a04a;">${pips}</span>
+    `;
+    div.title = maxed
+      ? `MAX LEVEL — ${faces} (+${currentBonus} chips)`
+      : `${faces} | +${currentBonus} → +${currentBonus + chipBonus} chips (${level}/${Game.MAX_DIE_UPGRADES})`;
+
+    if (!maxed) {
+      div.addEventListener('click', () => {
+        Game.upgradeDie(state, i, chipBonus);
+        overlay.remove();
+        const newLevel = Game.getDieUpgradeLevel(die);
+        showToast(`Die sharpened! [${faces}] now +${die.bonusChips} chips (${'★'.repeat(newLevel)})`);
+        renderShop();
+      });
+    }
 
     grid.appendChild(div);
   });
