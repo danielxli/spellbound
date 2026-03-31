@@ -450,6 +450,16 @@ html, body {
 .die-cell.die-gilded { background: #f5eab0; border-color: #d4c44a; }
 .die-cell.die-wild { background: #e0f0e0; border-color: #6abf6a; }
 
+/* Upgraded die — golden glow */
+.die-cell.die-upgraded {
+  background: linear-gradient(135deg, #f5e6c8, #f5eab0);
+  border-color: var(--amber);
+  box-shadow:
+    0 2px 4px rgba(0,0,0,0.3),
+    0 0 6px rgba(212, 160, 74, 0.25),
+    inset 0 1px 0 rgba(255,255,255,0.4);
+}
+
 /* Re-roll animation — tumble and reveal */
 @keyframes dieReroll {
   0% { transform: rotateX(0deg) scale(1); opacity: 1; }

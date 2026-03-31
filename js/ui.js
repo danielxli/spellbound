@@ -379,12 +379,16 @@ function renderGrid() {
 
       const tier = LETTER_TIERS[cell.letter] || 'common';
       const chips = LETTER_CHIPS[cell.letter] || 2;
+      const totalChips = chips + (cell.die.bonusChips || 0);
       const displayLetter = cell.isWild ? '★' : (cell.letter === 'QU' ? 'Qu' : cell.letter);
       const isQu = cell.letter === 'QU';
+      const isUpgraded = (cell.die.bonusChips || 0) > 0;
+
+      if (isUpgraded) div.classList.add('die-upgraded');
 
       div.innerHTML = `
         <span class="die-letter tier-${tier}${isQu ? ' die-qu' : ''}">${displayLetter}</span>
-        <span class="die-chips">${chips + (cell.die.bonusChips || 0)}</span>
+        <span class="die-chips">${totalChips}</span>
         ${isSelected ? `<span class="selection-order">${selIndex + 1}</span>` : ''}
       `;
 
@@ -1041,15 +1045,9 @@ function renderShop() {
         flavor = item.data.flavor;
         typeName = 'word upgrade';
         break;
-      case 'die_chip_upgrade':
+      case 'die_upgrade':
         name = item.data.name;
-        desc = `All dice gain +2 chips per letter (level ${item.data.level})`;
-        flavor = item.data.flavor;
-        typeName = 'die upgrade';
-        break;
-      case 'die_mult_upgrade':
-        name = item.data.name;
-        desc = `All words gain +1 base mult (level ${item.data.level})`;
+        desc = `Pick a die in your bag — it gains +${item.data.chipBonus} chips permanently`;
         flavor = item.data.flavor;
         typeName = 'die upgrade';
         break;
@@ -1094,12 +1092,69 @@ function buyItem(index) {
 
   const result = Game.buyShopItem(state, item);
   if (result.success) {
+    if (result.pickDie) {
+      // Show die picker overlay
+      item.sold = true;
+      showDiePicker(result.chipBonus);
+      renderShop();
+      return;
+    }
     item.sold = true;
     showToast(result.msg);
   } else {
     showToast(result.reason);
   }
   renderShop();
+}
+
+// ── Die Picker: choose which die to upgrade ──
+function showDiePicker(chipBonus) {
+  const overlay = document.createElement('div');
+  overlay.className = 'overlay';
+  overlay.innerHTML = `
+    <div class="overlay-card" style="max-width: 440px;">
+      <h2>Sharpen a Die</h2>
+      <p style="color: var(--cream-dim); font-size: 13px;">Choose a die to upgrade. It gains +${chipBonus} chips permanently on every face.</p>
+      <div id="die-picker-grid" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; width: 100%;"></div>
+    </div>
+  `;
+  document.getElementById('app').appendChild(overlay);
+
+  const grid = document.getElementById('die-picker-grid');
+  const { LETTER_CHIPS, LETTER_TIERS } = window.GameDice;
+
+  // Show all dice in the bag (first 16)
+  state.diceBag.forEach((die, i) => {
+    if (i >= 16) return; // only show grid-eligible dice
+    const sampleLetter = die.faces[0] === 'Q' ? 'QU' : die.faces[0];
+    const tier = LETTER_TIERS[sampleLetter] || 'common';
+    const baseChips = LETTER_CHIPS[sampleLetter] || 2;
+    const currentBonus = die.bonusChips || 0;
+    const faces = die.faces.map(f => f === 'Q' ? 'Qu' : f).join(' ');
+
+    const div = document.createElement('div');
+    div.className = 'die-cell';
+    div.style.cursor = 'pointer';
+    div.style.position = 'relative';
+    if (currentBonus > 0) {
+      div.style.borderColor = '#d4a04a';
+      div.style.boxShadow = '0 0 8px rgba(212,160,74,0.3)';
+    }
+    div.innerHTML = `
+      <span class="die-letter tier-${tier}" style="font-size: 16px;">${faces}</span>
+      <span class="die-chips">${currentBonus > 0 ? `+${currentBonus}` : ''}</span>
+    `;
+    div.title = `Faces: ${faces} | Current bonus: +${currentBonus} chips | Will become: +${currentBonus + chipBonus}`;
+
+    div.addEventListener('click', () => {
+      Game.upgradeDie(state, i, chipBonus);
+      overlay.remove();
+      showToast(`Die upgraded! +${die.bonusChips} chips on [${faces}]`);
+      renderShop();
+    });
+
+    grid.appendChild(div);
+  });
 }
 
 function leaveShop() {

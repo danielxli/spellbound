@@ -232,11 +232,10 @@ function detectPatterns(word) {
 function scoreWord(word, cells, gameState) {
   const { LETTER_CHIPS, LETTER_TIERS, getWordLengthMult } = window.GameDice;
 
-  // Per-letter chip breakdown (includes die chip upgrades)
-  const dieChipBonus = gameState.dieChipUpgrades * 2; // +2 chips per upgrade level
+  // Per-letter chip breakdown (includes per-die upgrades)
   const letterDetails = cells.map(cell => {
     const base = LETTER_CHIPS[cell.letter] || 2;
-    const dieBonus = (cell.die.bonusChips || 0) + dieChipBonus;
+    const dieBonus = cell.die.bonusChips || 0;
     const dieMult = cell.die.bonusMult || 0;
     return {
       letter: cell.letter === 'QU' ? 'Qu' : cell.letter,
@@ -244,16 +243,17 @@ function scoreWord(word, cells, gameState) {
       baseChips: base,
       dieBonus,
       dieMult,
-      tier: LETTER_TIERS[cell.letter] || 'common'
+      tier: LETTER_TIERS[cell.letter] || 'common',
+      upgraded: dieBonus > 0
     };
   });
 
   let baseChips = letterDetails.reduce((s, l) => s + l.chips, 0);
 
-  // Base mult = length table + word-type upgrades + die mult upgrades
+  // Base mult = length table + word-type upgrades
   const lengthKey = Math.min(word.length, 10);
   const lengthBonus = gameState.lengthBonuses[lengthKey] || 0;
-  let baseMult = getWordLengthMult(word.length) + lengthBonus + gameState.dieMultUpgrades;
+  let baseMult = getWordLengthMult(word.length) + lengthBonus;
 
   // Build charm context — track each charm's contribution
   const ctx = {
@@ -337,10 +337,6 @@ function createGameState() {
 
     // Word-type upgrades: bonus mult per word length (like Balatro planet cards)
     lengthBonuses: { 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0, 10: 0 },
-
-    // Die upgrade level: how many times the whole bag has been upgraded
-    dieChipUpgrades: 0,   // each level = +2 chips per die
-    dieMultUpgrades: 0,   // each level = +1 mult per word
 
     // Phase: 'title' | 'playing' | 'scoring' | 'pageResult' | 'shop' | 'skipChoice' | 'gameOver' | 'victory'
     phase: 'title',
@@ -561,30 +557,16 @@ function generateShopItems(state) {
     cost: upgradeCost
   });
 
-  // ── 1 Die upgrade (chips or mult for whole bag) ──
-  if (Math.random() > 0.5) {
-    const level = state.dieChipUpgrades;
-    items.push({
-      type: 'die_chip_upgrade',
-      data: {
-        name: 'Sharpen Dice',
-        flavor: 'Every letter cuts deeper.',
-        level: level + 1
-      },
-      cost: 5 + level * 3
-    });
-  } else {
-    const level = state.dieMultUpgrades;
-    items.push({
-      type: 'die_mult_upgrade',
-      data: {
-        name: 'Enchant Dice',
-        flavor: 'The dice hum with power.',
-        level: level + 1
-      },
-      cost: 6 + level * 3
-    });
-  }
+  // ── 1 Die upgrade (pick a die, +5 chips permanently) ──
+  items.push({
+    type: 'die_upgrade',
+    data: {
+      name: 'Sharpen a Die',
+      flavor: 'Choose a die. Every face cuts deeper.',
+      chipBonus: 5
+    },
+    cost: 5
+  });
 
   // ── 1 Ink card ──
   const inkCards = [
@@ -643,17 +625,21 @@ function buyShopItem(state, item) {
       return { success: true, msg: `${len}-letter words now have +${state.lengthBonuses[len]} bonus mult!` };
     }
 
-    case 'die_chip_upgrade':
-      state.dieChipUpgrades++;
-      return { success: true, msg: `All dice now give +${state.dieChipUpgrades * 2} bonus chips! (level ${state.dieChipUpgrades})` };
-
-    case 'die_mult_upgrade':
-      state.dieMultUpgrades++;
-      return { success: true, msg: `All words now have +${state.dieMultUpgrades} bonus mult! (level ${state.dieMultUpgrades})` };
+    case 'die_upgrade':
+      // Requires picking a die — returns 'pick_die' signal for UI to handle
+      return { success: true, msg: 'pick_die', pickDie: true, chipBonus: item.data.chipBonus };
 
     default:
       return { success: false, reason: 'Unknown item.' };
   }
+}
+
+// Apply die upgrade to a specific die in the bag
+function upgradeDie(state, dieIndex, chipBonus) {
+  const die = state.diceBag[dieIndex];
+  if (!die) return false;
+  die.bonusChips = (die.bonusChips || 0) + chipBonus;
+  return true;
 }
 
 function useInkCard(state, cardIndex) {
@@ -680,7 +666,7 @@ function useInkCard(state, cardIndex) {
 window.Game = {
   FLOORS, PAGE_NAMES, PAGE_GOLD, STORY_TWISTS, ALL_CHARMS, NARRATOR,
   createGameState, getTarget, getFloorInfo, startRound, submitWord,
-  endRound, advancePage, skipPage, generateShopItems, buyShopItem,
+  endRound, advancePage, skipPage, generateShopItems, buyShopItem, upgradeDie,
   useInkCard, scoreWord, detectPatterns, hasDoubleLetter, hasConsonantRun,
   isBookend, isVowelHeavy, isAllUnique
 };
