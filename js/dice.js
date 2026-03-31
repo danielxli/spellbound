@@ -41,12 +41,12 @@ const LETTER_CHIPS = {
 
 // Word length multipliers
 const LENGTH_MULT = {
-  3: 1, 4: 2, 5: 4, 6: 7, 7: 12
+  3: 2, 4: 3, 5: 5, 6: 8, 7: 13
 };
 
 function getWordLengthMult(length) {
-  if (length >= 7) return 12;
-  return LENGTH_MULT[length] || 1;
+  if (length >= 7) return 13;
+  return LENGTH_MULT[length] || 2;
 }
 
 // Create a fresh dice bag (array of dice, each die is array of 6 faces)

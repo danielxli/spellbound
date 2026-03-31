@@ -103,10 +103,12 @@ const PAGE_GOLD = [4, 6, 8]; // base gold per page type
 
 // ── Story Twists (Final Page modifiers) ──
 const STORY_TWISTS = [
-  { name: 'Purple Prose', genre: 'Romance', desc: 'Words under 5 letters score 0 — only long, lavish words count.' },
   { name: 'The Sequel', genre: 'Fantasy', desc: 'You cannot reuse any word you\'ve played earlier in the run.' },
-  { name: 'Writer\'s Block', genre: 'Literary Fiction', desc: 'You have only 15 seconds per word!' },
-  { name: 'Banned Books', genre: 'Dystopia', desc: '3-letter words are invalid this page.' }
+  { name: 'Banned Books', genre: 'Dystopia', desc: '3-letter words are invalid this page.' },
+  { name: 'Purple Prose', genre: 'Romance', desc: 'Words under 5 letters score 0 — only long, lavish words count.' },
+  { name: 'The Short Story', genre: 'Minimalism', desc: 'You only get 3 submissions this page.' },
+  { name: 'Lost in Translation', genre: 'Foreign Literature', desc: 'All vowel dice score 0 chips — only consonants count.' },
+  { name: 'The Rewrite', genre: 'Literary Fiction', desc: 'Your first 2 submissions score at half value.' }
 ];
 
 // ── Charm Definitions ──
@@ -141,13 +143,49 @@ const ALL_CHARMS = [
   { id: 'synonym_ribbon', name: 'Synonym Ribbon', flavor: 'Same meaning, different magic.', rarity: 'rare', cost: 7,
     desc: 'If current word is same length as previous word, gain +15 chips.',
     effect: (ctx) => { if (ctx.prevWordLength === ctx.word.length && ctx.prevWordLength > 0) ctx.bonusChips += 15; } },
+  // Common (continued)
+  { id: 'iron_nib', name: 'Iron Nib', flavor: 'Writes with authority.', rarity: 'common', cost: 3,
+    desc: '+2 chips for every consonant in the word.',
+    effect: (ctx) => { const cons = ctx.word.split('').filter(c => !'AEIOU'.includes(c)).length; ctx.bonusChips += cons * 2; } },
+  { id: 'page_turner', name: 'Page Turner', flavor: 'Can\'t put it down.', rarity: 'common', cost: 4,
+    desc: 'Each word scores +5 chips more than the last this round.',
+    effect: (ctx) => { ctx.bonusChips += ctx.wordIndex * 5; } },
+  // Uncommon (continued)
+  { id: 'overwriter', name: 'Overwriter', flavor: 'More is more.', rarity: 'uncommon', cost: 5,
+    desc: '5+ letter words gain x2 mult.',
+    effect: (ctx) => { if (ctx.word.length >= 5) ctx.multMultiplier *= 2; } },
+  { id: 'fountain_pen', name: 'Fountain Pen', flavor: 'Flows like water.', rarity: 'uncommon', cost: 5,
+    desc: 'Words with all unique letters gain +5 mult.',
+    effect: (ctx) => { if (new Set(ctx.word.split('')).size === ctx.word.length) ctx.bonusMult += 5; } },
+  { id: 'chapter_break', name: 'Chapter Break', flavor: 'And then everything changed.', rarity: 'uncommon', cost: 6,
+    desc: 'Your last submission each round gains x2 mult.',
+    effect: (ctx) => { if (ctx.isLastWord) ctx.multMultiplier *= 2; } },
+  // Rare (continued)
+  { id: 'ancient_tome', name: 'Ancient Tome', flavor: 'The words of those who came before.', rarity: 'rare', cost: 8,
+    desc: '7+ letter words gain x3 mult.',
+    effect: (ctx) => { if (ctx.word.length >= 7) ctx.multMultiplier *= 3; } },
+  { id: 'red_ink', name: 'Red Ink', flavor: 'Bleeds power.', rarity: 'rare', cost: 7,
+    desc: 'Words using rare/epic/legendary letters gain +4 mult.',
+    effect: (ctx) => {
+      const hasRare = ctx.cells.some(c => {
+        const tier = (GameDice.LETTER_TIERS[c.letter] || 'common');
+        return tier === 'rare' || tier === 'epic' || tier === 'legendary';
+      });
+      if (hasRare) ctx.bonusMult += 4;
+    } },
+  { id: 'crescendo', name: 'Crescendo', flavor: 'Building to something magnificent.', rarity: 'rare', cost: 8,
+    desc: 'Each word this round gains +1 mult more than the last.',
+    effect: (ctx) => { ctx.bonusMult += ctx.wordIndex; } },
   // Legendary
   { id: 'masterwork', name: 'The Masterwork', flavor: 'Only for those who demand perfection.', rarity: 'legendary', cost: 10,
     desc: 'If every word this round is 5+ letters, gain x5 mult on the last word.',
     effect: (ctx) => { if (ctx.isLastWord && ctx.allWordsLong) ctx.multMultiplier *= 5; } },
   { id: 'librarians_cat', name: "The Librarian's Cat", flavor: 'Knocks things off shelves. Helpfully.', rarity: 'legendary', cost: 10,
     desc: 'At round start, one random die becomes a wild card (any letter).',
-    effect: () => {} } // handled in round setup
+    effect: () => {} }, // handled in round setup
+  { id: 'golden_quill', name: 'Golden Quill', flavor: 'Worth its weight in stories.', rarity: 'legendary', cost: 12,
+    desc: 'All words gain x2 mult.',
+    effect: (ctx) => { ctx.multMultiplier *= 2; } }
 ];
 
 // ── Pattern detection helpers ──
@@ -241,15 +279,18 @@ function scoreWord(word, cells, gameState) {
     }
   }
 
-  // Die-based bonus mult
+  // Die-based bonus mult and gold
   let dieBonusMult = 0;
+  let dieBonusGold = 0;
   for (const cell of cells) {
     dieBonusMult += cell.die.bonusMult || 0;
+    dieBonusGold += cell.die.bonusGold || 0;
   }
 
   const totalChips = baseChips + ctx.bonusChips;
   const totalMult = (baseMult + ctx.bonusMult + dieBonusMult) * ctx.multMultiplier;
   const score = Math.floor(totalChips * totalMult);
+  const totalBonusGold = ctx.bonusGold + dieBonusGold;
 
   return {
     word, letterDetails,
@@ -258,7 +299,7 @@ function scoreWord(word, cells, gameState) {
     bonusMult: ctx.bonusMult + dieBonusMult,
     multMultiplier: ctx.multMultiplier,
     totalChips, totalMult, score,
-    bonusGold: ctx.bonusGold,
+    bonusGold: totalBonusGold,
     charmTriggers,
     patterns: detectPatterns(word)
   };
@@ -281,6 +322,7 @@ function createGameState() {
     maxSubmissions: 5,
     roundScore: 0,
     wordsThisRound: [],
+    wordHistory: [],
     selectedCells: [],
 
     // Build state
@@ -335,6 +377,10 @@ function startRound(state) {
   // Story twist for final page
   if (state.page === 2) {
     state.activeTwist = STORY_TWISTS[state.floor % STORY_TWISTS.length];
+    // Apply twist effects that modify round setup
+    if (state.activeTwist.name === 'The Short Story') {
+      state.submissionsLeft = 3;
+    }
   } else {
     state.activeTwist = null;
   }
@@ -363,6 +409,27 @@ function submitWord(state) {
 
   // Score the word
   const result = scoreWord(word, cells, state);
+
+  // Apply twist scoring modifiers
+  if (state.activeTwist) {
+    if (state.activeTwist.name === 'Lost in Translation') {
+      // Vowel dice score 0 chips — recalculate without vowel chip contributions
+      const vowels = 'AEIOU';
+      let vowelChipLoss = 0;
+      for (const ld of result.letterDetails) {
+        const rawLetter = ld.letter === 'Qu' ? 'QU' : ld.letter;
+        if (rawLetter.length === 1 && vowels.includes(rawLetter)) {
+          vowelChipLoss += ld.chips;
+        }
+      }
+      const adjustedChips = Math.max(1, result.totalChips - vowelChipLoss);
+      result.score = Math.floor(adjustedChips * result.totalMult);
+      result.totalChips = adjustedChips;
+    }
+    if (state.activeTwist.name === 'The Rewrite' && state.wordsThisRound.length < 2) {
+      result.score = Math.floor(result.score / 2);
+    }
+  }
 
   // Apply score
   state.roundScore += result.score;

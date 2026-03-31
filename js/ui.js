@@ -537,6 +537,55 @@ function onCellClick(r, c) {
   renderWordDisplay(); renderGrid(); renderActions(); renderSkipButton();
 }
 
+// ── Word finder for Muse's Whisper ──
+function findBestWord(grid) {
+  const { LETTER_CHIPS, getWordLengthMult } = window.GameDice;
+  let best = null;
+  let bestScore = 0;
+
+  function dfs(r, c, visited, cells, word) {
+    const cell = grid[r][c];
+    const letter = cell.isWild ? 'E' : cell.letter; // treat wild as E for search
+    const newWord = word + letter;
+    const newCells = [...cells, cell];
+    const newVisited = new Set(visited);
+    newVisited.add(`${r},${c}`);
+
+    const status = GameDictionary.checkPrefix(newWord);
+    if (status === 'none') return;
+
+    if (status === 'word' && newWord.length >= 3) {
+      const chips = newCells.reduce((s, cl) => s + (LETTER_CHIPS[cl.letter] || 2), 0);
+      const score = chips * getWordLengthMult(newWord.length);
+      if (score > bestScore) {
+        bestScore = score;
+        best = { word: newWord, cells: [...newCells] };
+      }
+    }
+
+    // Don't search too deep
+    if (newWord.length >= 8) return;
+
+    for (let dr = -1; dr <= 1; dr++) {
+      for (let dc = -1; dc <= 1; dc++) {
+        if (dr === 0 && dc === 0) continue;
+        const nr = r + dr, nc = c + dc;
+        if (nr < 0 || nr > 3 || nc < 0 || nc > 3) continue;
+        if (newVisited.has(`${nr},${nc}`)) continue;
+        dfs(nr, nc, newVisited, newCells, newWord);
+      }
+    }
+  }
+
+  for (let r = 0; r < 4; r++) {
+    for (let c = 0; c < 4; c++) {
+      dfs(r, c, new Set(), [], '');
+    }
+  }
+
+  return best;
+}
+
 function clearSelection() {
   state.selectedCells = [];
   renderWordDisplay(); renderGrid(); renderActions(); renderSkipButton();
@@ -825,8 +874,17 @@ function useInkCard(index) {
   if (!card) return;
 
   if (card.id === 'muse_whisper') {
-    showToast("The muse whispers: look for longer words!");
     state.inkCards.splice(index, 1);
+    const hint = findBestWord(state.grid);
+    if (hint) {
+      // Highlight the cells by selecting them
+      state.selectedCells = hint.cells;
+      showToast(`The muse whispers: "${hint.word}"`);
+    } else {
+      showToast("The muse finds nothing... the grid is barren.");
+    }
+    renderGame();
+    return;
   } else if (card.id === 'fresh_page') {
     // Mark all for animation
     for (let r = 0; r < 4; r++)
