@@ -1035,6 +1035,24 @@ function renderShop() {
         flavor = item.data.flavor;
         typeName = 'ink card';
         break;
+      case 'length_upgrade':
+        name = item.data.name;
+        desc = `${item.data.length}-letter words gain +1 base mult (×${GameDice.LENGTH_MULT[item.data.length] || 1}+${item.data.currentBonus} → ×${GameDice.LENGTH_MULT[item.data.length] || 1}+${item.data.newBonus})`;
+        flavor = item.data.flavor;
+        typeName = 'word upgrade';
+        break;
+      case 'die_chip_upgrade':
+        name = item.data.name;
+        desc = `All dice gain +2 chips per letter (level ${item.data.level})`;
+        flavor = item.data.flavor;
+        typeName = 'die upgrade';
+        break;
+      case 'die_mult_upgrade':
+        name = item.data.name;
+        desc = `All words gain +1 base mult (level ${item.data.level})`;
+        flavor = item.data.flavor;
+        typeName = 'die upgrade';
+        break;
     }
 
     div.innerHTML = `

@@ -232,10 +232,11 @@ function detectPatterns(word) {
 function scoreWord(word, cells, gameState) {
   const { LETTER_CHIPS, LETTER_TIERS, getWordLengthMult } = window.GameDice;
 
-  // Per-letter chip breakdown
+  // Per-letter chip breakdown (includes die chip upgrades)
+  const dieChipBonus = gameState.dieChipUpgrades * 2; // +2 chips per upgrade level
   const letterDetails = cells.map(cell => {
     const base = LETTER_CHIPS[cell.letter] || 2;
-    const dieBonus = cell.die.bonusChips || 0;
+    const dieBonus = (cell.die.bonusChips || 0) + dieChipBonus;
     const dieMult = cell.die.bonusMult || 0;
     return {
       letter: cell.letter === 'QU' ? 'Qu' : cell.letter,
@@ -248,7 +249,11 @@ function scoreWord(word, cells, gameState) {
   });
 
   let baseChips = letterDetails.reduce((s, l) => s + l.chips, 0);
-  let baseMult = getWordLengthMult(word.length);
+
+  // Base mult = length table + word-type upgrades + die mult upgrades
+  const lengthKey = Math.min(word.length, 10);
+  const lengthBonus = gameState.lengthBonuses[lengthKey] || 0;
+  let baseMult = getWordLengthMult(word.length) + lengthBonus + gameState.dieMultUpgrades;
 
   // Build charm context — track each charm's contribution
   const ctx = {
@@ -329,6 +334,13 @@ function createGameState() {
     charms: [],
     maxCharms: 5,
     inkCards: [],
+
+    // Word-type upgrades: bonus mult per word length (like Balatro planet cards)
+    lengthBonuses: { 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0, 10: 0 },
+
+    // Die upgrade level: how many times the whole bag has been upgraded
+    dieChipUpgrades: 0,   // each level = +2 chips per die
+    dieMultUpgrades: 0,   // each level = +1 mult per word
 
     // Phase: 'title' | 'playing' | 'scoring' | 'pageResult' | 'shop' | 'skipChoice' | 'gameOver' | 'victory'
     phase: 'title',
@@ -506,44 +518,93 @@ function skipPage(state) {
 }
 
 // ── Shop ──
+
+// Word-type upgrade names (flavor)
+const LENGTH_UPGRADE_NAMES = {
+  3: { name: 'Haiku', flavor: 'Brevity is the soul of wit.' },
+  4: { name: 'Limerick', flavor: 'Short and punchy.' },
+  5: { name: 'Sonnet', flavor: 'The poet\'s favorite length.' },
+  6: { name: 'Ballad', flavor: 'Long enough to tell a story.' },
+  7: { name: 'Epic', flavor: 'Now we\'re getting somewhere.' },
+  8: { name: 'Novella', flavor: 'Serious wordsmithing.' },
+  9: { name: 'Saga', flavor: 'A word of legend.' },
+  10: { name: 'Magnum Opus', flavor: 'The longest of words.' }
+};
+
 function generateShopItems(state) {
   const items = [];
-  const floor = state.floor;
 
-  // Always offer 1-2 charms
+  // ── 1-2 Charms ──
   const availableCharms = ALL_CHARMS.filter(c => !state.charms.some(owned => owned.id === c.id));
-  const shuffledCharms = availableCharms.sort(() => Math.random() - 0.5);
-  for (let i = 0; i < Math.min(2, shuffledCharms.length); i++) {
+  const shuffledCharms = shuffle(availableCharms);
+  const charmCount = state.charms.length >= state.maxCharms ? 0 : Math.min(2, shuffledCharms.length);
+  for (let i = 0; i < charmCount; i++) {
     items.push({ type: 'charm', data: shuffledCharms[i], cost: shuffledCharms[i].cost });
   }
 
-  // Offer a special die
-  const dieTypes = Object.values(GameDice.SPECIAL_DICE);
-  const die = dieTypes[Math.floor(Math.random() * dieTypes.length)];
-  const vowelFaces = ['A', 'E', 'I', 'O', 'U', 'A'];
-  const consonantFaces = ['R', 'S', 'T', 'N', 'L', 'D'];
-  const randomFaces = Math.random() > 0.5 ? vowelFaces : consonantFaces;
+  // ── 1 Word-type upgrade (like Balatro planet cards) ──
+  // Pick a random word length to offer an upgrade for
+  const lengths = [3, 4, 5, 6, 7, 8];
+  const targetLen = lengths[Math.floor(Math.random() * lengths.length)];
+  const currentBonus = state.lengthBonuses[targetLen] || 0;
+  const upgradeCost = 4 + currentBonus * 2; // gets more expensive each level
+  const info = LENGTH_UPGRADE_NAMES[targetLen] || { name: 'Verse', flavor: 'Words of power.' };
   items.push({
-    type: 'die',
-    data: { ...die, faces: randomFaces },
-    cost: die.cost
+    type: 'length_upgrade',
+    data: {
+      length: targetLen,
+      name: info.name,
+      flavor: info.flavor,
+      currentBonus,
+      newBonus: currentBonus + 1
+    },
+    cost: upgradeCost
   });
 
-  // Offer bag surgery (remove a die) if bag > 16
-  if (state.diceBag.length > 16) {
-    items.push({ type: 'remove_die', data: { name: 'Remove a Die', flavor: 'Trim the fat.' }, cost: 3 });
+  // ── 1 Die upgrade (chips or mult for whole bag) ──
+  if (Math.random() > 0.5) {
+    const level = state.dieChipUpgrades;
+    items.push({
+      type: 'die_chip_upgrade',
+      data: {
+        name: 'Sharpen Dice',
+        flavor: 'Every letter cuts deeper.',
+        level: level + 1
+      },
+      cost: 5 + level * 3
+    });
+  } else {
+    const level = state.dieMultUpgrades;
+    items.push({
+      type: 'die_mult_upgrade',
+      data: {
+        name: 'Enchant Dice',
+        flavor: 'The dice hum with power.',
+        level: level + 1
+      },
+      cost: 6 + level * 3
+    });
   }
 
-  // Offer an ink card
+  // ── 1 Ink card ──
   const inkCards = [
     { id: 'fresh_page', name: 'Fresh Page', flavor: 'Start over. No judgment.', desc: 'Re-roll the entire grid.', cost: 3 },
     { id: 'extra_ink', name: 'Extra Ink', flavor: 'Just a few more words...', desc: '+2 bonus submissions this round.', cost: 4 },
-    { id: 'muse_whisper', name: "Muse's Whisper", flavor: 'Psst — try this one.', desc: 'Highlights a high-scoring word.', cost: 2 }
+    { id: 'muse_whisper', name: "Muse's Whisper", flavor: 'Psst — try this one.', desc: 'Highlights the best word on the grid.', cost: 2 }
   ];
   const card = inkCards[Math.floor(Math.random() * inkCards.length)];
   items.push({ type: 'ink_card', data: card, cost: card.cost });
 
   return items;
+}
+
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
 }
 
 function buyShopItem(state, item) {
@@ -568,7 +629,6 @@ function buyShopItem(state, item) {
       return { success: true, msg: `Added ${item.data.name} to your bag! (${state.diceBag.length} dice)` };
 
     case 'remove_die':
-      // Remove a random standard die
       const stdIdx = state.diceBag.findIndex(d => d.type === 'standard');
       if (stdIdx >= 0) state.diceBag.splice(stdIdx, 1);
       return { success: true, msg: `Removed a die. (${state.diceBag.length} dice)` };
@@ -576,6 +636,20 @@ function buyShopItem(state, item) {
     case 'ink_card':
       state.inkCards.push(item.data);
       return { success: true, msg: `Got ${item.data.name}!` };
+
+    case 'length_upgrade': {
+      const len = item.data.length;
+      state.lengthBonuses[len] = (state.lengthBonuses[len] || 0) + 1;
+      return { success: true, msg: `${len}-letter words now have +${state.lengthBonuses[len]} bonus mult!` };
+    }
+
+    case 'die_chip_upgrade':
+      state.dieChipUpgrades++;
+      return { success: true, msg: `All dice now give +${state.dieChipUpgrades * 2} bonus chips! (level ${state.dieChipUpgrades})` };
+
+    case 'die_mult_upgrade':
+      state.dieMultUpgrades++;
+      return { success: true, msg: `All words now have +${state.dieMultUpgrades} bonus mult! (level ${state.dieMultUpgrades})` };
 
     default:
       return { success: false, reason: 'Unknown item.' };
