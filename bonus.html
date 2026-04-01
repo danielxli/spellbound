@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Spellbound — Dice Hall</title>
+<link href="https://fonts.googleapis.com/css2?family=Crimson+Text:ital,wght@0,400;0,600;0,700;1,400&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg-dark: #1a1410; --bg-main: #2a2118; --bg-card: #3a2f24; --bg-card-hover: #4a3f34; --bg-shelf: #2e241a;
+  --amber: #d4a04a; --amber-light: #e8c47a; --amber-dim: #8a6a2e;
+  --gold: #ffd700; --gold-dim: #b8960b;
+  --cream: #f0e6d2; --cream-dim: #c8b89a;
+  --red: #c44040; --red-dim: #8a2a2a;
+  --green: #4a9a4a; --green-light: #6abf6a;
+  --blue: #4a7ab0; --purple: #8a5ab0;
+  --text: #e8dcc8; --text-dim: #9a8a72; --text-dark: #5a4a3a;
+  --die-bg: #f5e6c8; --die-border: #c8a870; --die-held: #ffd700;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { width: 100%; height: 100%; background: var(--bg-dark); color: var(--text); font-family: 'Inter', sans-serif; font-size: 14px; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; touch-action: manipulation; overflow: hidden; }
+#app { width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; overflow-y: auto; background: radial-gradient(ellipse at 30% 20%, rgba(212,160,74,0.08) 0%, transparent 60%), radial-gradient(ellipse at 70% 80%, rgba(212,160,74,0.05) 0%, transparent 60%), var(--bg-dark); padding: 10px; max-width: 500px; margin: 0 auto; }
+
+.header { width: 100%; display: flex; justify-content: space-between; align-items: center; padding: 6px 4px; }
+.header-left { display: flex; flex-direction: column; gap: 1px; }
+.floor-name { font-family: 'Crimson Text', serif; font-size: 15px; font-weight: 700; color: var(--amber); }
+.floor-sub { font-size: 11px; color: var(--text-dim); }
+.gold-display { font-family: 'Crimson Text', serif; font-size: 16px; font-weight: 700; color: var(--gold); }
+
+.score-bar { width: 100%; padding: 4px 0; }
+.score-row { display: flex; justify-content: space-between; align-items: baseline; }
+.score-current { font-family: 'Crimson Text', serif; font-size: 30px; font-weight: 700; color: var(--cream); transition: color 0.3s; }
+.score-current.met { color: var(--green-light); }
+.score-target { font-size: 13px; color: var(--text-dim); }
+.progress-bar { width: 100%; height: 5px; background: var(--bg-card); border-radius: 4px; margin-top: 3px; overflow: hidden; }
+.progress-fill { height: 100%; border-radius: 4px; background: linear-gradient(90deg, var(--amber-dim), var(--amber)); transition: width 0.4s cubic-bezier(0.4,0,0.2,1); }
+.progress-fill.complete { background: linear-gradient(90deg, var(--green), var(--green-light)); }
+.round-info { display: flex; justify-content: space-between; margin-top: 4px; font-size: 12px; color: var(--text-dim); }
+
+/* Charms bar */
+.charms-bar { display: flex; gap: 4px; flex-wrap: wrap; justify-content: center; width: 100%; padding: 2px 0; }
+.charm-pip { font-size: 10px; padding: 2px 8px; background: var(--bg-card); border: 1px solid var(--amber-dim); border-radius: 10px; color: var(--cream-dim); cursor: default; white-space: nowrap; }
+.charm-pip.rarity-common { border-color: #888; } .charm-pip.rarity-uncommon { border-color: var(--green); } .charm-pip.rarity-rare { border-color: var(--blue); } .charm-pip.rarity-legendary { border-color: var(--gold); }
+
+.grid-wrap { position: relative; width: 100%; max-width: 330px; margin: 6px auto; }
+.dice-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; padding: 10px; background: linear-gradient(145deg, var(--bg-shelf), #261e14); border-radius: 12px; border: 3px solid rgba(212,160,74,0.2); box-shadow: 0 4px 16px rgba(0,0,0,0.5), inset 0 2px 8px rgba(0,0,0,0.3); }
+
+.row-labels, .col-labels { position: absolute; display: flex; }
+.row-labels { flex-direction: column; right: -26px; top: 10px; height: calc(100% - 20px); justify-content: space-around; }
+.col-labels { flex-direction: row; bottom: -22px; left: 10px; width: calc(100% - 20px); justify-content: space-around; }
+.line-label { font-size: 10px; color: var(--text-dark); cursor: pointer; transition: color 0.15s; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; }
+.line-label:hover { color: var(--amber); }
+.diag-tl { position: absolute; top: -4px; left: -24px; }
+.diag-tr { position: absolute; top: -4px; right: -26px; }
+
+.die { aspect-ratio: 1; display: flex; align-items: center; justify-content: center; background: var(--die-bg); border: 2px solid var(--die-border); border-radius: 7px; cursor: pointer; transition: all 0.15s cubic-bezier(0.4,0,0.2,1); position: relative; box-shadow: 0 2px 4px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.3); }
+.die:hover { transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.3); }
+.die.held { border-color: var(--die-held); transform: translateY(-3px) scale(1.05); box-shadow: 0 4px 12px rgba(255,215,0,0.4), inset 0 1px 0 rgba(255,255,255,0.4); }
+.die.held::after { content: 'HELD'; position: absolute; bottom: 0px; left: 50%; transform: translateX(-50%); font-size: 6px; font-weight: 700; color: #b89000; letter-spacing: 1px; }
+.die.highlight { border-color: var(--amber); box-shadow: 0 0 10px rgba(212,160,74,0.5); }
+.die.disabled { opacity: 0.5; pointer-events: none; }
+.die.bonus-die { background: #e8d8b0; border-color: var(--amber); }
+.die.bonus-die::before { content: '★'; position: absolute; top: -1px; right: 2px; font-size: 7px; color: var(--amber); }
+
+.pip-grid { display: grid; width: 65%; height: 65%; grid-template: repeat(3, 1fr) / repeat(3, 1fr); gap: 1px; }
+.pip { width: 100%; aspect-ratio: 1; background: #4a3a2a; border-radius: 50%; display: none; }
+.pip-1 .p5 { display: block; }
+.pip-2 .p1, .pip-2 .p9 { display: block; }
+.pip-3 .p1, .pip-3 .p5, .pip-3 .p9 { display: block; }
+.pip-4 .p1, .pip-4 .p3, .pip-4 .p7, .pip-4 .p9 { display: block; }
+.pip-5 .p1, .pip-5 .p3, .pip-5 .p5, .pip-5 .p7, .pip-5 .p9 { display: block; }
+.pip-6 .p1, .pip-6 .p3, .pip-6 .p4, .pip-6 .p6, .pip-6 .p7, .pip-6 .p9 { display: block; }
+
+.actions { width: 100%; max-width: 330px; display: flex; gap: 8px; justify-content: center; margin: 6px 0; }
+.btn { font-family: 'Crimson Text', serif; font-size: 15px; font-weight: 600; padding: 9px 20px; border: 2px solid var(--amber-dim); border-radius: 6px; background: var(--bg-card); color: var(--amber); cursor: pointer; transition: all 0.2s; letter-spacing: 1px; flex: 1; }
+.btn:hover { background: var(--bg-card-hover); border-color: var(--amber); box-shadow: 0 0 20px rgba(212,160,74,0.2); }
+.btn:active { transform: scale(0.97); }
+.btn-gold { border-color: var(--gold-dim); color: var(--gold); background: linear-gradient(180deg, rgba(255,215,0,0.12), rgba(212,160,74,0.06)); }
+.btn-gold:hover { border-color: var(--gold); background: linear-gradient(180deg, rgba(255,215,0,0.2), rgba(212,160,74,0.1)); }
+.btn-disabled { opacity: 0.4; pointer-events: none; }
+.btn-small { font-size: 12px; padding: 5px 12px; flex: none; }
+
+.overlay { position: fixed; inset: 0; background: rgba(10,8,6,0.85); display: flex; align-items: center; justify-content: center; z-index: 100; animation: fadeIn 0.3s; }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+.overlay-card { background: var(--bg-main); border: 2px solid var(--amber-dim); border-radius: 12px; padding: 16px; max-width: 420px; width: 92%; max-height: 85vh; overflow-y: auto; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.overlay-card h2 { font-family: 'Crimson Text', serif; color: var(--amber); font-size: 20px; }
+
+.score-table { width: 100%; font-size: 11px; border-collapse: collapse; }
+.score-table th { text-align: left; color: var(--text-dim); font-weight: normal; text-transform: uppercase; font-size: 9px; letter-spacing: 0.5px; padding: 3px 4px; border-bottom: 1px solid var(--bg-card); }
+.score-table td { padding: 3px 4px; border-bottom: 1px solid rgba(58,47,36,0.3); }
+.score-table .combo-name { color: var(--cream); font-weight: 600; }
+.score-table .combo-none { color: var(--text-dark); }
+.score-table .line-total { color: var(--amber); font-weight: 700; text-align: right; }
+.score-table .pips { color: var(--cream-dim); text-align: right; }
+.score-table .bonus { color: var(--gold); text-align: right; }
+.score-table .line-type { color: var(--text-dim); }
+.score-row-anim { opacity: 0; transform: translateY(6px); transition: all 0.25s; }
+.score-row-anim.shown { opacity: 1; transform: translateY(0); }
+.grand-total { font-family: 'Crimson Text', serif; font-size: 26px; font-weight: 700; color: var(--gold); }
+.submit-total-label { font-size: 11px; color: var(--text-dim); }
+
+.title-screen { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; gap: 14px; text-align: center; padding: 40px 24px; }
+.title-screen h1 { font-family: 'Crimson Text', serif; font-size: 48px; font-weight: 700; color: var(--amber); text-shadow: 0 2px 20px rgba(212,160,74,0.4); letter-spacing: 4px; }
+.title-screen .subtitle { font-family: 'Crimson Text', serif; font-style: italic; font-size: 18px; color: var(--cream-dim); }
+.title-screen .tagline { font-size: 13px; color: var(--text-dim); line-height: 1.5; max-width: 300px; }
+
+.result-score { font-family: 'Crimson Text', serif; font-size: 32px; font-weight: 700; }
+.result-floor { font-size: 13px; color: var(--text-dim); margin-top: 2px; }
+
+.shop-section { width: 100%; max-width: 420px; padding: 12px 0; }
+.shop-header { text-align: center; margin-bottom: 12px; }
+.shop-header h2 { font-family: 'Crimson Text', serif; color: var(--amber); font-size: 20px; }
+.shop-gold { font-family: 'Crimson Text', serif; color: var(--gold); font-size: 18px; margin-top: 4px; }
+.shop-divider { text-align: center; font-size: 12px; color: var(--text-dark); margin: 12px 0 8px; }
+.shop-item { width: 100%; padding: 9px 12px; background: var(--bg-card); border: 1px solid rgba(212,160,74,0.15); border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 10px; transition: all 0.2s; margin-bottom: 6px; }
+.shop-item:hover { border-color: var(--amber); background: var(--bg-card-hover); }
+.shop-item.sold { opacity: 0.3; pointer-events: none; }
+.shop-item.cant-afford { opacity: 0.5; }
+.shop-item-icon { font-size: 18px; width: 28px; text-align: center; }
+.shop-item-info { flex: 1; }
+.shop-item-name { font-family: 'Crimson Text', serif; font-weight: 700; color: var(--cream); font-size: 13px; }
+.shop-item-desc { font-size: 11px; color: var(--cream-dim); margin-top: 1px; }
+.shop-item-type { font-size: 9px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; }
+.shop-item-cost { font-family: 'Crimson Text', serif; font-weight: 700; color: var(--gold); font-size: 14px; min-width: 32px; text-align: right; }
+.shop-item[data-rarity="uncommon"] { border-left: 3px solid var(--green); }
+.shop-item[data-rarity="rare"] { border-left: 3px solid var(--blue); }
+.shop-item[data-rarity="legendary"] { border-left: 3px solid var(--gold); }
+
+.build-section { width: 100%; }
+.build-charm { display: flex; justify-content: space-between; align-items: center; padding: 4px 8px; background: var(--bg-card); border-radius: 4px; margin-bottom: 3px; font-size: 11px; cursor: pointer; }
+.build-charm:hover { background: var(--bg-card-hover); }
+.build-charm .sell-tag { color: var(--text-dark); font-size: 10px; }
+
+.finish-btn { width: 100%; max-width: 330px; padding: 8px; background: rgba(74,154,74,0.1); border: 1px solid var(--green); border-radius: 6px; color: var(--green-light); cursor: pointer; font-family: 'Crimson Text', serif; font-size: 14px; transition: all 0.2s; }
+.finish-btn:hover { background: rgba(74,154,74,0.2); }
+.finish-bonus { font-size: 11px; color: var(--green); display: block; }
+
+@keyframes dieRoll { 0% { transform: scale(0.7) rotate(-20deg); opacity: 0; } 60% { transform: scale(1.05) rotate(5deg); opacity: 1; } 100% { transform: scale(1) rotate(0); } }
+.die.rolling { animation: dieRoll 0.35s cubic-bezier(0.34,1.56,0.64,1) forwards; }
+@keyframes shakeGrid { 0%,100% { transform: translate(0); } 20% { transform: translate(-3px,2px); } 40% { transform: translate(3px,-2px); } 60% { transform: translate(-2px,-3px); } 80% { transform: translate(2px,3px); } }
+.dice-grid.shaking { animation: shakeGrid 0.35s ease; }
+@keyframes ctaPulse { 0%,100% { box-shadow: 0 0 12px rgba(255,215,0,0.1); } 50% { box-shadow: 0 0 28px rgba(255,215,0,0.35); } }
+
+@media (max-height: 700px) { .dice-grid { gap: 3px; padding: 8px; } .score-current { font-size: 24px; } }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+// ═══════════════════════════════════════════
+// DICE HALL — Yahtzee-style 5x5 bonus mode
+// ═══════════════════════════════════════════
+
+// ── Audio ──
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+function ensureAudio() { if (audioCtx.state === 'suspended') audioCtx.resume(); }
+function playSound(freq, type, dur, vol=0.15) {
+  const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+  o.type = type; o.frequency.value = freq;
+  g.gain.setValueAtTime(vol, audioCtx.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + dur);
+  o.connect(g); g.connect(audioCtx.destination); o.start(); o.stop(audioCtx.currentTime + dur);
+}
+function sfxClick() { playSound(1800,'sine',0.03,0.1); }
+function sfxHold() { playSound(800,'triangle',0.06,0.12); }
+function sfxUnhold() { playSound(600,'triangle',0.04,0.08); }
+function sfxRoll() { for(let i=0;i<5;i++) setTimeout(()=>playSound(200+Math.random()*400,'square',0.04,0.06),i*30); }
+function sfxScore() { playSound(523,'sine',0.1,0.12); setTimeout(()=>playSound(659,'sine',0.1,0.12),80); setTimeout(()=>playSound(784,'sine',0.15,0.15),160); }
+function sfxBigScore() { playSound(523,'sine',0.15,0.15); setTimeout(()=>playSound(659,'sine',0.15,0.15),100); setTimeout(()=>playSound(784,'sine',0.15,0.15),200); setTimeout(()=>playSound(1047,'sine',0.3,0.2),300); }
+function sfxGold() { playSound(3000,'sine',0.08,0.1); playSound(4500,'sine',0.1,0.08); }
+function sfxFail() { playSound(200,'sine',0.3,0.15); setTimeout(()=>playSound(150,'sine',0.4,0.12),150); }
+function sfxSell() { playSound(400,'triangle',0.1,0.1); }
+
+// ── Combo Detection ──
+function counts(dice) { const c={}; for(const d of dice) c[d]=(c[d]||0)+1; return c; }
+const COMBOS = [
+  { name:'Five of a Kind', bonus:75, check:d=>Object.values(counts(d)).includes(5) },
+  { name:'Four of a Kind', bonus:55, check:d=>Object.values(counts(d)).includes(4) },
+  { name:'Large Straight', bonus:50, check:d=>{const s=[...new Set(d)].sort((a,b)=>a-b);return s.length===5&&s[4]-s[0]===4;} },
+  { name:'Full House', bonus:40, check:d=>{const v=Object.values(counts(d)).sort();return v.length===2&&v[0]===2&&v[1]===3;} },
+  { name:'Small Straight', bonus:35, check:d=>{const s=[...new Set(d)].sort((a,b)=>a-b).join('');return s.includes('1234')||s.includes('2345')||s.includes('3456');} },
+  { name:'Three of a Kind', bonus:30, check:d=>Object.values(counts(d)).includes(3) },
+  { name:'Two Pair', bonus:20, check:d=>Object.values(counts(d)).filter(v=>v>=2).length>=2 },
+  { name:'One Pair', bonus:10, check:d=>Object.values(counts(d)).some(v=>v>=2) },
+  { name:'High Card', bonus:0, check:()=>true },
+];
+
+function detectCombo(dice) {
+  for (const c of COMBOS) if (c.check(dice)) return { name: c.name, bonus: c.bonus };
+  return { name: 'High Card', bonus: 0 };
+}
+
+// ── Floor Definitions ──
+const FLOORS = [
+  { num:1, name:'The Counting Room', target:[150,200,300] },
+  { num:2, name:'The Odds Table', target:[300,450,600] },
+  { num:3, name:'The High Stakes', target:[600,850,1100] },
+  { num:4, name:'The Grand Hall', target:[1100,1500,2000] },
+  { num:5, name:'The Vault', target:[2000,2800,3600] },
+  { num:6, name:'The Forbidden Archive', target:[3500,4800,6500] },
+  { num:7, name:'The Final Wager', target:[6000,8500,12000] },
+];
+const PAGE_NAMES = ['Opening','Rising','Final'];
+const PAGE_GOLD = [5,7,10];
+
+// ── Charms ──
+const ALL_CHARMS = [
+  // Common
+  { id:'pip_plus', name:'Weighted Dice', desc:'+2 pips to every line.', rarity:'common', cost:3,
+    effect: ctx => { ctx.bonusPips += 2; } },
+  { id:'pair_bonus', name:'Double Vision', desc:'Pairs give +8 bonus (instead of +10→+18).', rarity:'common', cost:4,
+    effect: ctx => { if(ctx.combo==='One Pair') ctx.bonusCombo += 8; } },
+  { id:'reroll_master', name:'Quick Fingers', desc:'+1 reroll each round.', rarity:'common', cost:3, onRoundStart: s => { s.rerolls++; } },
+  { id:'gold_rush', name:'Gold Rush', desc:'+2 gold after each page.', rarity:'common', cost:3,
+    onPageClear: s => { s.gold += 2; } },
+
+  // Uncommon
+  { id:'triple_power', name:'Triple Threat', desc:'Three of a Kind gives +20 bonus (instead of +30→+50).', rarity:'uncommon', cost:5,
+    effect: ctx => { if(ctx.combo==='Three of a Kind') ctx.bonusCombo += 20; } },
+  { id:'straight_edge', name:'Straight Edge', desc:'Straights give +15 bonus.', rarity:'uncommon', cost:5,
+    effect: ctx => { if(ctx.combo.includes('Straight')) ctx.bonusCombo += 15; } },
+  { id:'full_house_fan', name:'Full House Fan', desc:'Full House gives +25 bonus.', rarity:'uncommon', cost:6,
+    effect: ctx => { if(ctx.combo==='Full House') ctx.bonusCombo += 25; } },
+  { id:'hand_plus', name:'Extra Hand', desc:'+1 submission each round.', rarity:'uncommon', cost:7,
+    onRoundStart: s => { s.submissions++; } },
+  { id:'high_roller', name:'High Roller', desc:'+1 pip per die showing 5 or 6.', rarity:'uncommon', cost:5,
+    effectLine: (dice, ctx) => { ctx.bonusPips += dice.filter(d=>d>=5).length; } },
+
+  // Rare
+  { id:'yahtzee_hunter', name:'Yahtzee Hunter', desc:'Five of a Kind gives +50 bonus (→+125).', rarity:'rare', cost:8,
+    effect: ctx => { if(ctx.combo==='Five of a Kind') ctx.bonusCombo += 50; } },
+  { id:'line_mult', name:'Amplifier', desc:'All line scores ×1.5.', rarity:'rare', cost:10,
+    effectMult: ctx => { ctx.multiplier *= 1.5; } },
+  { id:'diagonal_master', name:'Diagonal Master', desc:'Diagonal lines score ×2.', rarity:'rare', cost:8,
+    effectMult: ctx => { if(ctx.lineType==='diag') ctx.multiplier *= 2; } },
+  { id:'row_master', name:'Row Master', desc:'Row lines get +10 pips.', rarity:'rare', cost:7,
+    effect: ctx => { if(ctx.lineType==='row') ctx.bonusPips += 10; } },
+  { id:'interest', name:'Savings Account', desc:'Earn +1 gold per 5 held (max +5) after each page.', rarity:'rare', cost:6,
+    onPageClear: s => { s.gold += Math.min(5, Math.floor(s.gold / 5)); } },
+
+  // Legendary
+  { id:'double_score', name:'Double or Nothing', desc:'All scores ×2. Lose 2 gold per reroll.', rarity:'legendary', cost:12,
+    effectMult: ctx => { ctx.multiplier *= 2; }, onReroll: s => { s.gold = Math.max(0, s.gold - 2); } },
+  { id:'perfectionist', name:'Perfectionist', desc:'If all 12 lines have a combo (no High Card), +200 to hand score.', rarity:'legendary', cost:10,
+    effectBoard: (details, ctx) => { if(details.every(d=>d.rawBonus>0)) ctx.boardBonus += 200; } },
+  { id:'lucky_seven', name:'Lucky Sevens', desc:'Every 7th hand scored in the run gives ×3.', rarity:'legendary', cost:9,
+    effectMult: ctx => { if(ctx.handNumber % 7 === 0) ctx.multiplier *= 3; } },
+];
+
+// ── Game State ──
+let state = null;
+
+function createState() {
+  return {
+    phase: 'title',
+    floor: 0, page: 0,
+    gold: 0, runScore: 0,
+    grid: null,
+    submissions: 3, maxSubmissions: 3,
+    rerolls: 5, maxRerolls: 5,
+    roundScore: 0,
+    handsPlayed: 0,
+    floorsCleared: 0,
+    charms: [],
+    maxCharms: 5,
+  };
+}
+
+function rollDie() { return Math.floor(Math.random()*6)+1; }
+function dealGrid() {
+  const g=[]; for(let r=0;r<5;r++){g[r]=[];for(let c=0;c<5;c++) g[r][c]={value:rollDie(),held:false};} return g;
+}
+function getTarget() { return (FLOORS[state.floor]||FLOORS[FLOORS.length-1]).target[state.page]; }
+function getFloorInfo() { return FLOORS[state.floor]||FLOORS[FLOORS.length-1]; }
+
+function getLines(grid) {
+  const lines = [];
+  for(let r=0;r<5;r++) lines.push({name:`Row ${r+1}`,type:'row',idx:r,dice:grid[r].map(c=>c.value)});
+  for(let c=0;c<5;c++) lines.push({name:`Col ${c+1}`,type:'col',idx:c,dice:grid.map(row=>row[c].value)});
+  lines.push({name:'Diag ↘',type:'diag',idx:0,dice:[0,1,2,3,4].map(i=>grid[i][i].value)});
+  lines.push({name:'Diag ↙',type:'diag',idx:1,dice:[0,1,2,3,4].map(i=>grid[i][4-i].value)});
+  return lines;
+}
+
+function scoreBoardWithCharms(grid) {
+  state.handsPlayed++;
+  const lines = getLines(grid);
+  let boardBonus = 0;
+  const boardCtx = { boardBonus, handNumber: state.handsPlayed };
+
+  const details = lines.map(line => {
+    const raw = detectCombo(line.dice);
+    const ctx = { combo: raw.name, rawBonus: raw.bonus, lineType: line.type, bonusPips: 0, bonusCombo: 0, multiplier: 1 };
+
+    // Apply charm effects
+    for (const charm of state.charms) {
+      if (charm.effect) charm.effect(ctx);
+      if (charm.effectLine) charm.effectLine(line.dice, ctx);
+      if (charm.effectMult) charm.effectMult(ctx);
+    }
+
+    // Lucky Sevens check
+    for (const charm of state.charms) {
+      if (charm.id === 'lucky_seven' && state.handsPlayed % 7 === 0) {
+        ctx.multiplier *= 3;
+        break;
+      }
+    }
+
+    const pips = line.dice.reduce((s,d)=>s+d,0) + ctx.bonusPips;
+    const bonus = raw.bonus + ctx.bonusCombo;
+    const lineTotal = Math.max(0, Math.floor((pips + bonus) * ctx.multiplier));
+
+    return { ...line, combo: raw.name, pips, bonus, total: lineTotal, rawPips: line.dice.reduce((s,d)=>s+d,0), rawBonus: raw.bonus, multiplier: ctx.multiplier };
+  });
+
+  // Board-level charm effects (e.g. Perfectionist)
+  for (const charm of state.charms) {
+    if (charm.effectBoard) charm.effectBoard(details, boardCtx);
+  }
+
+  let total = details.reduce((s,d)=>s+d.total,0) + boardCtx.boardBonus;
+  return { details, total, boardBonus: boardCtx.boardBonus };
+}
+
+// ── Rendering ──
+const app = document.getElementById('app');
+let highlightedCells = new Set();
+
+function render() {
+  switch(state.phase) {
+    case 'title': renderTitle(); break;
+    case 'playing': renderGame(); break;
+    case 'shop': renderShop(); break;
+    case 'gameOver': renderGameOver(); break;
+    case 'victory': renderVictory(); break;
+  }
+}
+
+function renderTitle() {
+  app.innerHTML = `
+    <div class="title-screen">
+      <h1>DICE HALL</h1>
+      <div class="subtitle">A Spellbound Bonus Mode</div>
+      <div class="tagline">Roll a 5×5 grid. Score rows, columns, and diagonals with Yahtzee combos. Buy upgrades. Climb the floors.</div>
+      <div style="background:var(--bg-card);border-radius:8px;padding:12px 16px;font-size:11px;color:var(--cream-dim);max-width:320px;line-height:1.6;margin-top:4px;">
+        <strong style="color:var(--amber);">How to play:</strong><br>
+        • Click dice to <strong>hold</strong> them, then <strong>Reroll</strong> the rest<br>
+        • <strong>Score</strong> to submit the board — all 12 lines are scored<br>
+        • Pip sum + combo bonus per line<br>
+        • 3 hands + 5 rerolls per round — hit the target to advance
+      </div>
+      <button class="btn btn-gold" onclick="startGame()" style="margin-top:12px;animation:ctaPulse 2.5s ease-in-out infinite;">Begin</button>
+      <a href="index.html" style="color:var(--text-dark);font-size:12px;margin-top:12px;text-decoration:none;">← Back to Spellbound</a>
+    </div>`;
+}
+
+function pipHTML(v) {
+  return `<div class="pip-grid pip-${v}"><div class="pip p1"></div><div class="pip p2"></div><div class="pip p3"></div><div class="pip p4"></div><div class="pip p5"></div><div class="pip p6"></div><div class="pip p7"></div><div class="pip p8"></div><div class="pip p9"></div></div>`;
+}
+
+function renderGame() {
+  const target=getTarget(), floor=getFloorInfo();
+  const pct=Math.min(100,(state.roundScore/target)*100), met=state.roundScore>=target;
+
+  let charmsHTML = '';
+  if (state.charms.length > 0) {
+    charmsHTML = `<div class="charms-bar">${state.charms.map(c=>`<span class="charm-pip rarity-${c.rarity}" title="${c.desc}">${c.name}</span>`).join('')}</div>`;
+  }
+
+  app.innerHTML = `
+    <div class="header">
+      <div class="header-left">
+        <div class="floor-name">Floor ${floor.num} — ${floor.name}</div>
+        <div class="floor-sub">${PAGE_NAMES[state.page]} Page</div>
+      </div>
+      <div class="header-right"><div class="gold-display">${state.gold}g</div></div>
+    </div>
+    <div class="score-bar">
+      <div class="score-row">
+        <div class="score-current ${met?'met':''}">${state.roundScore}</div>
+        <div class="score-target">Target: ${target}</div>
+      </div>
+      <div class="progress-bar"><div class="progress-fill ${pct>=100?'complete':''}" style="width:${pct}%"></div></div>
+      <div class="round-info"><span>${state.submissions} hands</span><span>${state.rerolls} rerolls</span></div>
+    </div>
+    ${charmsHTML}
+    <div class="grid-wrap">
+      <div class="dice-grid" id="dice-grid">
+        ${state.grid.map((row,r)=>row.map((cell,c)=>{
+          const hl=highlightedCells.has(`${r},${c}`)?' highlight':'';
+          const held=cell.held?' held':'';
+          const dis=state.submissions<=0?' disabled':'';
+          return `<div class="die${held}${hl}${dis}" onclick="toggleHold(${r},${c})">${pipHTML(cell.value)}</div>`;
+        }).join('')).join('')}
+      </div>
+      <div class="row-labels">${[0,1,2,3,4].map(i=>`<div class="line-label" onmouseenter="hlLine('row',${i})" onmouseleave="clearHL()">R${i+1}</div>`).join('')}</div>
+      <div class="col-labels">${[0,1,2,3,4].map(i=>`<div class="line-label" onmouseenter="hlLine('col',${i})" onmouseleave="clearHL()">C${i+1}</div>`).join('')}</div>
+      <div class="line-label diag-tl" onmouseenter="hlLine('diag',0)" onmouseleave="clearHL()">↘</div>
+      <div class="line-label diag-tr" onmouseenter="hlLine('diag',1)" onmouseleave="clearHL()">↙</div>
+    </div>
+    <div class="actions">
+      <button class="btn ${state.rerolls<=0?'btn-disabled':''}" onclick="doReroll()">Reroll (${state.rerolls})</button>
+      <button class="btn btn-gold ${state.submissions<=0?'btn-disabled':''}" onclick="doScore()">Score (${state.submissions})</button>
+    </div>
+    ${met && state.submissions>0 ? `<button class="finish-btn" onclick="finishEarly()"><span>Finish Page Early</span><span class="finish-bonus">+${state.submissions} bonus gold for unused hands</span></button>` : ''}
+  `;
+}
+
+// ── Interaction ──
+function toggleHold(r,c) {
+  if(state.phase!=='playing'||state.submissions<=0) return;
+  ensureAudio(); state.grid[r][c].held=!state.grid[r][c].held;
+  state.grid[r][c].held ? sfxHold() : sfxUnhold();
+  renderGame();
+}
+
+function doReroll() {
+  if(state.rerolls<=0||state.phase!=='playing') return;
+  ensureAudio(); state.rerolls--;
+  // Charm: Double or Nothing costs gold on reroll
+  for(const ch of state.charms) if(ch.onReroll) ch.onReroll(state);
+  const rolled=[];
+  for(let r=0;r<5;r++) for(let c=0;c<5;c++) if(!state.grid[r][c].held){state.grid[r][c].value=rollDie();rolled.push(r*5+c);}
+  sfxRoll(); renderGame();
+  const els=document.querySelectorAll('#dice-grid .die');
+  for(const idx of rolled) els[idx]?.classList.add('rolling');
+  document.getElementById('dice-grid')?.classList.add('shaking');
+  setTimeout(()=>document.getElementById('dice-grid')?.classList.remove('shaking'),350);
+}
+
+function doScore() {
+  if(state.submissions<=0||state.phase!=='playing') return;
+  ensureAudio(); state.submissions--;
+  const result=scoreBoardWithCharms(state.grid);
+  state.roundScore+=result.total; state.runScore+=result.total;
+  showScoringBreakdown(result,()=>{
+    if(state.submissions<=0) endRound();
+    else { state.grid=dealGrid(); for(const ch of state.charms) if(ch.onRoundStart) ch.onRoundStart(state); renderGame(); animateGridEntrance(); sfxRoll(); }
+  });
+}
+
+function finishEarly() {
+  if(state.roundScore<getTarget()) return;
+  ensureAudio();
+  state.gold+=state.submissions; state.submissions=0;
+  endRound();
+}
+
+function endRound() {
+  const target=getTarget(), passed=state.roundScore>=target;
+  if(passed){
+    state.floorsCleared=Math.max(state.floorsCleared,state.floor+(state.page===2?1:0));
+    const baseGold=PAGE_GOLD[state.page];
+    state.gold+=baseGold;
+    for(const ch of state.charms) if(ch.onPageClear) ch.onPageClear(state);
+    sfxScore();
+    if(state.page<2){state.page++;state.phase='shop';}
+    else if(state.floor>=FLOORS.length-1){state.phase='victory';}
+    else{state.floor++;state.page=0;state.phase='shop';}
+  } else { sfxFail(); state.phase='gameOver'; }
+  render();
+}
+
+function startRound() {
+  state.grid=dealGrid();
+  state.submissions=state.maxSubmissions;
+  state.rerolls=state.maxRerolls;
+  state.roundScore=0;
+  // Apply round-start charms
+  for(const ch of state.charms) if(ch.onRoundStart) ch.onRoundStart(state);
+  state.phase='playing';
+  render(); animateGridEntrance(); sfxRoll();
+}
+
+function animateGridEntrance() {
+  const els=document.querySelectorAll('#dice-grid .die');
+  els.forEach((el,i)=>{el.style.opacity='0';el.style.transform='scale(0.5) rotate(-15deg)';
+    setTimeout(()=>{el.style.transition='all 0.3s cubic-bezier(0.34,1.56,0.64,1)';el.style.opacity='1';el.style.transform='';},30+i*18);
+  });
+}
+
+// ── Scoring Breakdown ──
+function showScoringBreakdown(result, onDone) {
+  const ov=document.createElement('div'); ov.className='overlay';
+  ov.innerHTML=`<div class="overlay-card">
+    <h2>Board Scored!</h2>
+    <table class="score-table"><thead><tr><th>Line</th><th>Combo</th><th style="text-align:right">Pips</th><th style="text-align:right">Bonus</th>${result.details.some(d=>d.multiplier>1)?'<th style="text-align:right">Mult</th>':''}<th style="text-align:right">Total</th></tr></thead>
+    <tbody>${result.details.map((d,i)=>`<tr class="score-row-anim" data-idx="${i}">
+      <td class="line-type">${d.name}</td>
+      <td class="${d.bonus>0?'combo-name':'combo-none'}">${d.combo}</td>
+      <td class="pips">${d.pips}</td>
+      <td class="bonus">${d.bonus>0?'+'+d.bonus:'—'}</td>
+      ${d.multiplier>1?`<td style="color:var(--amber);text-align:right;">×${d.multiplier.toFixed(1)}</td>`:(result.details.some(dd=>dd.multiplier>1)?'<td></td>':'')}
+      <td class="line-total">${d.total}</td>
+    </tr>`).join('')}</tbody></table>
+    ${result.boardBonus>0?`<div style="color:var(--gold);font-size:12px;">Board bonus: +${result.boardBonus}</div>`:''}
+    <div class="submit-total-label">Hand Total</div>
+    <div class="grand-total" id="gt" style="opacity:0">+${result.total}</div>
+    <button class="btn btn-gold btn-small" id="sc" style="opacity:0">Continue</button>
+  </div>`;
+  app.appendChild(ov);
+  const rows=ov.querySelectorAll('.score-row-anim');
+  rows.forEach((row,i)=>setTimeout(()=>{row.classList.add('shown');if(result.details[i].bonus>0)sfxClick();},120+i*60));
+  const t=120+rows.length*60;
+  setTimeout(()=>{const g=document.getElementById('gt');if(g){g.style.opacity='1';g.style.transition='opacity 0.3s';}result.total>=150?sfxBigScore():sfxScore();},t+150);
+  setTimeout(()=>{const b=document.getElementById('sc');if(b){b.style.opacity='1';b.style.transition='opacity 0.3s';}},t+400);
+  const dismiss=()=>{ov.remove();onDone();};
+  ov.querySelector('#sc').addEventListener('click',dismiss);
+}
+
+// ── Line Highlighting ──
+function hlLine(type,idx) {
+  highlightedCells.clear();
+  if(type==='row') for(let c=0;c<5;c++) highlightedCells.add(`${idx},${c}`);
+  else if(type==='col') for(let r=0;r<5;r++) highlightedCells.add(`${r},${idx}`);
+  else for(let i=0;i<5;i++) highlightedCells.add(idx===0?`${i},${i}`:`${i},${4-i}`);
+  document.querySelectorAll('#dice-grid .die').forEach((el,i)=>{
+    const r=Math.floor(i/5),c=i%5;
+    el.classList.toggle('highlight',highlightedCells.has(`${r},${c}`));
+  });
+}
+function clearHL() { highlightedCells.clear(); document.querySelectorAll('#dice-grid .die.highlight').forEach(el=>el.classList.remove('highlight')); }
+
+// ── Shop ──
+let shopItems = [];
+
+function generateShopItems() {
+  const available = ALL_CHARMS.filter(c => !state.charms.some(owned => owned.id === c.id));
+  const items = [];
+
+  // 2-3 charms based on weighted rarity
+  const weights = { common: 0.45, uncommon: 0.30, rare: 0.18, legendary: 0.07 };
+  // Shift weights later in game
+  if (state.floor >= 3) { weights.common = 0.25; weights.uncommon = 0.30; weights.rare = 0.30; weights.legendary = 0.15; }
+  if (state.floor >= 5) { weights.common = 0.15; weights.uncommon = 0.25; weights.rare = 0.35; weights.legendary = 0.25; }
+
+  const charmCount = Math.min(available.length, state.floor >= 3 ? 3 : 2);
+  const picked = new Set();
+  for (let i = 0; i < charmCount; i++) {
+    const roll = Math.random();
+    let targetRarity;
+    if (roll < weights.common) targetRarity = 'common';
+    else if (roll < weights.common + weights.uncommon) targetRarity = 'uncommon';
+    else if (roll < weights.common + weights.uncommon + weights.rare) targetRarity = 'rare';
+    else targetRarity = 'legendary';
+    let candidates = available.filter(c => c.rarity === targetRarity && !picked.has(c.id));
+    if (candidates.length === 0) candidates = available.filter(c => !picked.has(c.id));
+    if (candidates.length > 0) {
+      const charm = candidates[Math.floor(Math.random() * candidates.length)];
+      picked.add(charm.id);
+      items.push({ type: 'charm', data: charm, cost: charm.cost, sold: false });
+    }
+  }
+
+  // 1 consumable: extra reroll or extra hand (one-time for next round)
+  const consumables = [
+    { name: 'Steady Hand', desc: '+1 max submission permanently.', cost: 8, icon: '✋', effect: () => { state.maxSubmissions++; } },
+    { name: 'Nimble Fingers', desc: '+2 max rerolls permanently.', cost: 5, icon: '🎲', effect: () => { state.maxRerolls += 2; } },
+    { name: 'Lucky Coin', desc: '+5 gold right now.', cost: 2, icon: '🪙', effect: () => { state.gold += 5; } },
+  ];
+  const con = consumables[Math.floor(Math.random() * consumables.length)];
+  items.push({ type: 'consumable', data: con, cost: con.cost, sold: false });
+
+  return items;
+}
+
+function renderShop() {
+  if (shopItems.length === 0 || shopItems.every(i => i.sold)) shopItems = generateShopItems();
+  const floor = getFloorInfo();
+
+  app.innerHTML = `<div class="shop-section">
+    <div class="shop-header">
+      <h2>The Dice Merchant</h2>
+      <div style="color:var(--text-dim);font-size:12px;">Floor ${floor.num} — ${PAGE_NAMES[state.page]} next</div>
+      <div class="shop-gold">${state.gold} gold</div>
+    </div>
+    <div id="shop-list"></div>
+    ${state.charms.length > 0 ? `
+      <div class="shop-divider">── Your Charms (${state.charms.length}/${state.maxCharms}) ──</div>
+      <div class="build-section" id="build-charms"></div>
+    ` : ''}
+    <button class="btn btn-gold" onclick="leaveShop()" style="width:100%;margin-top:14px;">Continue to Next Page</button>
+  </div>`;
+
+  const list = document.getElementById('shop-list');
+  shopItems.forEach((item, i) => {
+    const canAfford = state.gold >= item.cost;
+    const charmsFull = item.type === 'charm' && state.charms.length >= state.maxCharms;
+    const div = document.createElement('div');
+    div.className = 'shop-item' + (item.sold ? ' sold' : '') + (!canAfford && !item.sold ? ' cant-afford' : '');
+    if (item.type === 'charm') div.dataset.rarity = item.data.rarity;
+
+    if (item.type === 'charm') {
+      div.innerHTML = `
+        <div class="shop-item-icon">✦</div>
+        <div class="shop-item-info">
+          <div class="shop-item-name">${item.data.name}</div>
+          <div class="shop-item-desc">${item.data.desc}</div>
+          <div class="shop-item-type">${item.data.rarity} charm</div>
+        </div>
+        <div class="shop-item-cost">${item.sold?'SOLD':item.cost+'g'}</div>`;
+    } else {
+      div.innerHTML = `
+        <div class="shop-item-icon">${item.data.icon||'•'}</div>
+        <div class="shop-item-info">
+          <div class="shop-item-name">${item.data.name}</div>
+          <div class="shop-item-desc">${item.data.desc}</div>
+          <div class="shop-item-type">upgrade</div>
+        </div>
+        <div class="shop-item-cost">${item.sold?'SOLD':item.cost+'g'}</div>`;
+    }
+
+    if (!item.sold) {
+      div.addEventListener('click', () => {
+        if (state.gold < item.cost) return;
+        if (item.type === 'charm' && state.charms.length >= state.maxCharms) return;
+        ensureAudio(); state.gold -= item.cost; item.sold = true;
+        if (item.type === 'charm') state.charms.push(item.data);
+        else item.data.effect();
+        sfxGold(); renderShop();
+      });
+    }
+    list.appendChild(div);
+  });
+
+  // Render owned charms with sell option
+  const buildEl = document.getElementById('build-charms');
+  if (buildEl) {
+    state.charms.forEach((charm, i) => {
+      const refund = Math.ceil(charm.cost / 2);
+      const div = document.createElement('div');
+      div.className = 'build-charm';
+      div.innerHTML = `<span style="color:var(--cream);">${charm.name}</span><span class="sell-tag">sell +${refund}g</span>`;
+      div.addEventListener('click', () => {
+        ensureAudio(); state.gold += refund; state.charms.splice(i, 1); sfxSell(); renderShop();
+      });
+      buildEl.appendChild(div);
+    });
+  }
+}
+
+function leaveShop() { shopItems = []; startRound(); }
+
+// ── Game Over / Victory ──
+function renderGameOver() {
+  app.innerHTML = `<div class="title-screen">
+    <div class="overlay-card" style="text-align:center;">
+      <h2 style="color:var(--red);">Game Over</h2>
+      <p style="color:var(--cream-dim);font-style:italic;font-family:'Crimson Text',serif;">The dice went cold.</p>
+      <div class="result-score" style="color:var(--red);">${state.roundScore} / ${getTarget()}</div>
+      <div class="result-floor">Floor ${getFloorInfo().num} — ${PAGE_NAMES[state.page]}</div>
+      <div style="margin-top:10px;font-size:12px;color:var(--text-dim);">Floors cleared: ${state.floorsCleared} · Hands: ${state.handsPlayed} · Score: ${state.runScore}</div>
+      ${state.charms.length>0?`<div style="margin-top:6px;font-size:11px;color:var(--text-dim);">Charms: ${state.charms.map(c=>c.name).join(', ')}</div>`:''}
+      <button class="btn btn-gold" onclick="startGame()" style="margin-top:12px;">Try Again</button>
+      <a href="index.html" style="color:var(--text-dark);font-size:12px;margin-top:8px;text-decoration:none;">← Back to Spellbound</a>
+    </div>
+  </div>`;
+}
+
+function renderVictory() {
+  app.innerHTML = `<div class="title-screen">
+    <div class="overlay-card" style="text-align:center;">
+      <h2 style="color:var(--gold);">Victory!</h2>
+      <p style="color:var(--cream-dim);font-style:italic;font-family:'Crimson Text',serif;">The Dice Hall bows to your mastery.</p>
+      <div class="result-score" style="color:var(--gold);">${state.runScore}</div>
+      <div class="result-floor">All ${FLOORS.length} floors cleared</div>
+      <div style="margin-top:10px;font-size:12px;color:var(--text-dim);">Hands: ${state.handsPlayed} · Gold: ${state.gold}</div>
+      ${state.charms.length>0?`<div style="margin-top:6px;font-size:11px;color:var(--text-dim);">Charms: ${state.charms.map(c=>c.name).join(', ')}</div>`:''}
+      <button class="btn btn-gold" onclick="startGame()" style="margin-top:12px;">Play Again</button>
+      <a href="index.html" style="color:var(--text-dark);font-size:12px;margin-top:8px;text-decoration:none;">← Back to Spellbound</a>
+    </div>
+  </div>`;
+  sfxBigScore();
+}
+
+// ── Init ──
+function startGame() { ensureAudio(); state=createState(); startRound(); }
+state=createState(); render();
+
+window.startGame=startGame; window.toggleHold=toggleHold; window.doReroll=doReroll;
+window.doScore=doScore; window.finishEarly=finishEarly; window.leaveShop=leaveShop;
+window.hlLine=hlLine; window.clearHL=clearHL;
+</script>
+</body>
+</html>
