@@ -1,6 +1,6 @@
 // ui.js — Rendering, input handling, screen management, animations, narrator
 
-const GAME_VERSION = '0.6.0';
+const GAME_VERSION = '0.6.1';
 
 let state = null;
 let shopItems = [];
@@ -523,7 +523,7 @@ function renderFinishButton() {
 
   // Only set content if not already showing (avoid re-triggering animation)
   if (!el.querySelector('.finish-btn')) {
-    const bonus = state.submissionsLeft * 2;
+    const bonus = state.submissionsLeft;
     el.innerHTML = `
       <button class="finish-btn" onclick="endRoundEarly()">
         <span class="finish-label">Finish Page</span>
@@ -535,7 +535,7 @@ function renderFinishButton() {
     // Update bonus text in case submissions changed
     const bonusEl = el.querySelector('.finish-bonus');
     if (bonusEl) {
-      const bonus = state.submissionsLeft * 2;
+      const bonus = state.submissionsLeft;
       bonusEl.textContent = `+${bonus} bonus gold for ${state.submissionsLeft} unused submission${state.submissionsLeft !== 1 ? 's' : ''}`;
     }
   }
@@ -1028,7 +1028,7 @@ function showPageResult() {
         <span class="reward-value">+${r.baseGold}</span>
       </div>
       <div class="gold-reward-row" id="gr-bonus">
-        <span class="reward-label">${r.bonusGold / 2} unused submission${r.bonusGold / 2 !== 1 ? 's' : ''} × 2</span>
+        <span class="reward-label">${r.bonusGold} unused submission${r.bonusGold !== 1 ? 's' : ''}</span>
         <span class="reward-value">+${r.bonusGold}</span>
       </div>
       ${r.interest > 0 ? `<div class="gold-reward-row" id="gr-interest">

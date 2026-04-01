@@ -553,7 +553,7 @@ function endRound(state) {
     state.pagesCleared++;
     // Award gold
     const baseGold = PAGE_GOLD[state.page];
-    const bonusGold = state.submissionsLeft * 2;
+    const bonusGold = state.submissionsLeft;
     const interest = Math.min(5, Math.floor(state.gold / 5)); // +1 per 5 held, max +5
     state.gold += baseGold + bonusGold + interest;
 
