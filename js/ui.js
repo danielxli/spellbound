@@ -1,5 +1,7 @@
 // ui.js — Rendering, input handling, screen management, animations, narrator
 
+const GAME_VERSION = '0.6.0';
+
 let state = null;
 let shopItems = [];
 let lastGold = 0;
@@ -45,6 +47,9 @@ async function init() {
       document.getElementById('title-stats').textContent = `${stats.runsPlayed} runs · Best floor: ${stats.bestFloor} · Best score: ${stats.bestScore}`;
     }
   }
+
+  // Set version
+  document.getElementById('title-version').textContent = `v${GAME_VERSION}`;
 
   // Transition to title
   document.getElementById('loading-screen').style.display = 'none';
@@ -1616,6 +1621,7 @@ function showSettings() {
         </div>
       </div>
       <button class="btn btn-gold" onclick="closeSettings()">Done</button>
+      <div style="font-size: 10px; color: var(--text-dark); margin-top: 4px;">v${GAME_VERSION}</div>
     </div>
   `;
   document.getElementById('app').appendChild(div);
