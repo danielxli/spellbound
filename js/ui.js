@@ -1,12 +1,14 @@
 // ui.js — Rendering, input handling, screen management, animations, narrator
 
-const GAME_VERSION = '0.6.1';
+const GAME_VERSION = '0.7.0';
 
 let state = null;
 let shopItems = [];
 let lastGold = 0;
 let narratorTimer = null;
 let rerolledPositions = new Set(); // track which cells just re-rolled for animation
+let selectedCharacter = 'novelist';
+let roundTimer = null; // setInterval for journalist countdown
 
 // ── Helpers ──
 function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
@@ -27,6 +29,9 @@ async function init() {
   state = Game.createGameState();
   createDustMotes();
 
+  // Build character selector
+  renderCharacterSelect();
+
   // Check for saved run
   if (Storage.hasRun()) {
     const titleBtns = document.getElementById('title-buttons');
@@ -36,17 +41,16 @@ async function init() {
     resumeBtn.onclick = resumeGame;
     titleBtns.insertBefore(resumeBtn, titleBtns.firstChild);
     document.getElementById('start-btn').textContent = 'New Run';
-    // Show career stats if available
-    const stats = Storage.loadStats();
-    if (stats.runsPlayed > 0) {
-      document.getElementById('title-stats').textContent = `${stats.runsPlayed} runs · Best floor: ${stats.bestFloor} · Best score: ${stats.bestScore}`;
-    }
-  } else {
-    const stats = Storage.loadStats();
-    if (stats.runsPlayed > 0) {
-      document.getElementById('title-stats').textContent = `${stats.runsPlayed} runs · Best floor: ${stats.bestFloor} · Best score: ${stats.bestScore}`;
-    }
   }
+
+  // Show career stats
+  const stats = Storage.loadStats();
+  if (stats.runsPlayed > 0) {
+    document.getElementById('title-stats').textContent = `${stats.runsPlayed} runs · Best floor: ${stats.bestFloor} · Best score: ${stats.bestScore}`;
+  }
+
+  // Show run history
+  renderRunHistory();
 
   // Set version
   document.getElementById('title-version').textContent = `v${GAME_VERSION}`;
@@ -81,8 +85,10 @@ function resumeGame() {
     return;
   }
   state = loaded;
+  selectedCharacter = state.writer || 'novelist';
   GameAudio.ensureContext();
   render();
+  if (state.phase === 'playing') startTimerIfNeeded();
 }
 
 function handleKeydown(e) {
@@ -165,6 +171,52 @@ function narrateWordReaction(result) {
 }
 
 // ── Main render ──
+// ── Character Selection ──
+function renderCharacterSelect() {
+  const el = document.getElementById('character-select');
+  el.innerHTML = '';
+  for (const [key, char] of Object.entries(Game.CHARACTERS)) {
+    const card = document.createElement('div');
+    card.className = 'char-card' + (selectedCharacter === key ? ' selected' : '');
+    card.innerHTML = `
+      <div class="char-name">${char.name}</div>
+      <div class="char-desc">${char.desc}</div>
+    `;
+    card.addEventListener('click', () => {
+      selectedCharacter = key;
+      renderCharacterSelect();
+    });
+    el.appendChild(card);
+  }
+}
+
+// ── Run History ──
+function renderRunHistory() {
+  const el = document.getElementById('run-history');
+  const history = Storage.loadHistory();
+  if (history.length === 0) { el.innerHTML = ''; return; }
+
+  let html = '<div class="history-title">Recent Runs</div><div class="history-list">';
+  for (const run of history.slice(0, 10)) {
+    const date = new Date(run.date);
+    const dateStr = `${date.getMonth()+1}/${date.getDate()}`;
+    const charName = Game.CHARACTERS[run.character]?.name || 'Novelist';
+    const charTag = run.character === 'journalist' ? 'J' : 'N';
+    const result = run.victory
+      ? '<span class="history-victory">VICTORY</span>'
+      : `<span class="history-death">Floor ${run.floorsCleared}</span>`;
+    html += `<div class="history-row">
+      <span class="history-date">${dateStr}</span>
+      <span class="history-char">${charTag}</span>
+      ${result}
+      <span class="history-score">${run.score.toLocaleString()}</span>
+      <span class="history-words">${run.wordsPlayed}w</span>
+    </div>`;
+  }
+  html += '</div>';
+  el.innerHTML = html;
+}
+
 function render() {
   const loadingScreen = document.getElementById('loading-screen');
   const titleScreen = document.getElementById('title-screen');
@@ -209,6 +261,9 @@ function render() {
 function startGame() {
   Storage.clearRun();
   state = Game.createGameState();
+  state.writer = selectedCharacter;
+  const char = Game.CHARACTERS[state.writer] || Game.CHARACTERS.novelist;
+  state.maxSubmissions = char.submissions;
   GameAudio.ensureContext();
   showFloorIntro(() => {
     state.phase = 'playing';
@@ -216,6 +271,7 @@ function startGame() {
     render();
     animateGridEntrance();
     GameAudio.playDeal();
+    startTimerIfNeeded();
     Storage.saveRun(state);
   });
 }
@@ -397,7 +453,14 @@ function renderGame() {
   if (pct >= 100) fill.classList.add('complete');
   else if (pct >= 70) fill.classList.add('close');
 
-  document.getElementById('submissions-left').textContent = `${state.submissionsLeft} submissions left`;
+  const char = Game.CHARACTERS[state.writer] || Game.CHARACTERS.novelist;
+  const subsEl = document.getElementById('submissions-left');
+  if (char.timed) {
+    const secs = Math.ceil(state.timerRemaining);
+    subsEl.innerHTML = `<span id="timer-display" class="timer-display${secs <= 10 ? ' timer-urgent' : ''}${secs <= 5 ? ' timer-critical' : ''}">${secs}s</span> · ${state.wordsThisRound.length} words`;
+  } else {
+    subsEl.textContent = `${state.submissionsLeft} submissions left`;
+  }
 
   // Twist banner
   const twistEl = document.getElementById('twist-banner');
@@ -501,12 +564,14 @@ function renderActions() {
   const el = document.getElementById('actions-row');
   const word = state.selectedCells.map(c => c.isWild ? (c.wildLetter || '★') : c.letter).join('');
   const isValid = word.length >= 3 && GameDictionary.isValidWord(word);
-  const canShake = state.submissionsLeft > 0;
+  const char = Game.CHARACTERS[state.writer] || Game.CHARACTERS.novelist;
+  const canShake = char.timed ? (state.timerRemaining > 0) : (state.submissionsLeft > 0);
+  const shakeTitle = char.timed ? 'Re-roll the entire grid' : 'Re-roll the entire grid (costs 1 submission)';
 
   el.innerHTML = `
     <button class="btn btn-small ${state.selectedCells.length === 0 ? 'btn-disabled' : 'btn-red'}" onclick="clearSelection()">Clear</button>
     <button class="btn btn-small btn-gold ${!isValid ? 'btn-disabled' : ''}" onclick="doSubmitWord()">Submit</button>
-    <button class="btn btn-small ${!canShake ? 'btn-disabled' : ''}" onclick="doShakeGrid()" title="Re-roll the entire grid (costs 1 submission)">Shake</button>
+    <button class="btn btn-small ${!canShake ? 'btn-disabled' : ''}" onclick="doShakeGrid()" title="${shakeTitle}">Shake</button>
   `;
 
   renderFinishButton();
@@ -527,11 +592,19 @@ function renderFinishButton() {
 
   // Only set content if not already showing (avoid re-triggering animation)
   if (!el.querySelector('.finish-btn')) {
-    const bonus = state.submissionsLeft;
+    const char = Game.CHARACTERS[state.writer] || Game.CHARACTERS.novelist;
+    let bonusText;
+    if (char.timed) {
+      const bonus = Math.floor(state.timerRemaining / 10);
+      bonusText = `+${bonus} bonus gold (${Math.floor(state.timerRemaining)}s left)`;
+    } else {
+      const bonus = state.submissionsLeft;
+      bonusText = `+${bonus} bonus gold for ${state.submissionsLeft} unused submission${state.submissionsLeft !== 1 ? 's' : ''}`;
+    }
     el.innerHTML = `
       <button class="finish-btn" onclick="endRoundEarly()">
         <span class="finish-label">Finish Page</span>
-        <span class="finish-bonus">+${bonus} bonus gold for ${state.submissionsLeft} unused submission${state.submissionsLeft !== 1 ? 's' : ''}</span>
+        <span class="finish-bonus">${bonusText}</span>
       </button>
     `;
     el.className = 'finish-row active';
@@ -708,8 +781,13 @@ function clearSelection() {
 
 // ── Shake Grid — with animation ──
 function doShakeGrid() {
-  if (state.submissionsLeft <= 0) return;
-  state.submissionsLeft--;
+  const char = Game.CHARACTERS[state.writer] || Game.CHARACTERS.novelist;
+  if (char.timed) {
+    if (state.timerRemaining <= 0) return;
+  } else {
+    if (state.submissionsLeft <= 0) return;
+    state.submissionsLeft--;
+  }
   state.selectedCells = [];
 
   // Mark all positions for animation
@@ -728,7 +806,7 @@ function doShakeGrid() {
   container.classList.add('shaking');
   setTimeout(() => container.classList.remove('shaking'), 400);
 
-  if (state.submissionsLeft <= 0) {
+  if (!char.timed && state.submissionsLeft <= 0) {
     setTimeout(() => finishRound(), 800);
   }
 
@@ -778,8 +856,9 @@ function doSubmitWord() {
     // Auto-save after word submit
     Storage.saveRun(state);
 
-    // Check if round is over
-    if (state.submissionsLeft <= 0) {
+    // Check if round is over (novelist: out of submissions)
+    const ch = Game.CHARACTERS[state.writer] || Game.CHARACTERS.novelist;
+    if (!ch.timed && state.submissionsLeft <= 0) {
       setTimeout(() => finishRound(), 600);
     }
 
@@ -962,6 +1041,7 @@ function endRoundEarly() {
 }
 
 function finishRound() {
+  stopTimer();
   const result = Game.endRound(state);
 
   if (result.passed) {
@@ -1032,7 +1112,7 @@ function showPageResult() {
         <span class="reward-value">+${r.baseGold}</span>
       </div>
       <div class="gold-reward-row" id="gr-bonus">
-        <span class="reward-label">${r.bonusGold} unused submission${r.bonusGold !== 1 ? 's' : ''}</span>
+        <span class="reward-label">${r.bonusLabel}</span>
         <span class="reward-value">+${r.bonusGold}</span>
       </div>
       ${r.interest > 0 ? `<div class="gold-reward-row" id="gr-interest">
@@ -1337,12 +1417,14 @@ function leaveShop() {
         render();
         animateGridEntrance();
         GameAudio.playDeal();
+        startTimerIfNeeded();
         Storage.saveRun(state);
       });
     } else {
       render();
       animateGridEntrance();
       GameAudio.playDeal();
+      startTimerIfNeeded();
       Storage.saveRun(state);
     }
   } else if (state.page === 0) {
@@ -1353,6 +1435,7 @@ function leaveShop() {
       render();
       animateGridEntrance();
       GameAudio.playDeal();
+      startTimerIfNeeded();
       Storage.saveRun(state);
     });
   } else {
@@ -1361,14 +1444,17 @@ function leaveShop() {
     render();
     animateGridEntrance();
     GameAudio.playDeal();
+    startTimerIfNeeded();
     Storage.saveRun(state);
   }
 }
 
 // ── Game Over — with narrative ──
 function showGameOver() {
+  stopTimer();
   Storage.clearRun();
   Storage.updateStats(state);
+  Storage.addRunToHistory(state);
   GameAudio.playGameOver();
 
   const r = state.pageResult;
@@ -1400,8 +1486,10 @@ function showGameOver() {
 
 // ── Victory — with particles and narrative ──
 function showVictory() {
+  stopTimer();
   Storage.clearRun();
   Storage.updateStats(state);
+  Storage.addRunToHistory(state);
   GameAudio.playVictory();
 
   const div = document.createElement('div');
@@ -1433,6 +1521,7 @@ function showVictory() {
 }
 
 function goToTitle() {
+  stopTimer();
   state = Game.createGameState();
   // Reset title screen buttons
   const titleBtns = document.getElementById('title-buttons');
@@ -1442,6 +1531,8 @@ function goToTitle() {
   if (stats.runsPlayed > 0) {
     document.getElementById('title-stats').textContent = `${stats.runsPlayed} runs · Best floor: ${stats.bestFloor} · Best score: ${stats.bestScore}`;
   }
+  renderCharacterSelect();
+  renderRunHistory();
   render();
 }
 
@@ -1500,6 +1591,7 @@ function showWildPicker(cell, onPick) {
 function showPause() {
   if (state.phase !== 'playing' || scoringAnimationActive) return;
   if (document.getElementById('pause-overlay')) return;
+  stopTimer();
 
   const div = document.createElement('div');
   div.className = 'overlay';
@@ -1521,6 +1613,7 @@ function showPause() {
 function closePause() {
   const el = document.getElementById('pause-overlay');
   if (el) el.remove();
+  if (state.phase === 'playing') startTimerIfNeeded();
 }
 
 function confirmQuit() {
@@ -1537,8 +1630,10 @@ function confirmQuit() {
 }
 
 function quitRun() {
+  stopTimer();
   Storage.clearRun();
   Storage.updateStats(state);
+  Storage.addRunToHistory(state);
   closePause();
   goToTitle();
 }
@@ -1595,6 +1690,36 @@ function showSettings() {
 function closeSettings() {
   const el = document.getElementById('settings-overlay');
   if (el) el.remove();
+}
+
+// ── Journalist Timer ──
+function startTimerIfNeeded() {
+  stopTimer();
+  const char = Game.CHARACTERS[state.writer] || Game.CHARACTERS.novelist;
+  if (!char.timed || state.phase !== 'playing') return;
+  roundTimer = setInterval(() => {
+    if (state.phase !== 'playing' || scoringAnimationActive) return;
+    state.timerRemaining = Math.max(0, state.timerRemaining - 0.1);
+    updateTimerDisplay();
+    if (state.timerRemaining <= 0) {
+      stopTimer();
+      finishRound();
+    }
+  }, 100);
+}
+
+function stopTimer() {
+  if (roundTimer) { clearInterval(roundTimer); roundTimer = null; }
+}
+
+function updateTimerDisplay() {
+  const el = document.getElementById('timer-display');
+  if (!el) return;
+  const secs = Math.ceil(state.timerRemaining);
+  el.textContent = `${secs}s`;
+  el.className = 'timer-display';
+  if (secs <= 10) el.classList.add('timer-urgent');
+  if (secs <= 5) el.classList.add('timer-critical');
 }
 
 // ── Animation speed helper ──

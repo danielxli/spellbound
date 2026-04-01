@@ -98,6 +98,25 @@ const NARRATOR = {
 const PAGE_NAMES = ['Opening Page', 'Rising Page', 'Final Page'];
 const PAGE_GOLD = [6, 8, 10]; // base gold per page type
 
+// ── Character definitions ──
+const CHARACTERS = {
+  novelist: {
+    name: 'The Novelist',
+    desc: '5 submissions per round, no timer. Methodical and strategic.',
+    flavor: 'Take your time. Every word deserves thought.',
+    submissions: 5,
+    timed: false
+  },
+  journalist: {
+    name: 'The Journalist',
+    desc: '50-second timer, unlimited submissions. Fast and frantic.',
+    flavor: 'Deadline in 50 seconds. Write fast or miss the story.',
+    submissions: 999,  // effectively unlimited
+    timed: true,
+    timerSeconds: 50
+  }
+};
+
 // ── Story Twists (Final Page modifiers) ──
 const STORY_TWISTS = [
   { name: 'The Sequel', genre: 'Fantasy', desc: 'You cannot reuse any word you\'ve played earlier in the run.' },
@@ -421,8 +440,12 @@ function createGameState() {
     // Story twist for final page
     activeTwist: null,
 
-    // Journalist timer (not used for Novelist prototype)
+    // Character
     writer: 'novelist',
+
+    // Timer (journalist only)
+    timerTotal: 0,
+    timerRemaining: 0,
 
     // Stats
     wordsPlayed: 0,
@@ -445,15 +468,24 @@ function getFloorInfo(state) {
 
 function startRound(state) {
   state.grid = GameDice.dealGrid(state.diceBag);
-  state.submissionsLeft = state.maxSubmissions;
   state.roundScore = 0;
   state.wordsThisRound = [];
   state.selectedCells = [];
   state.phase = 'playing';
 
-  // Apply Speed Reader penalty
-  if (state.charms.some(c => c.id === 'speed_reader')) {
-    state.submissionsLeft = 3;
+  const char = CHARACTERS[state.writer] || CHARACTERS.novelist;
+  if (char.timed) {
+    state.submissionsLeft = char.submissions;
+    state.timerTotal = char.timerSeconds;
+    state.timerRemaining = char.timerSeconds;
+  } else {
+    state.submissionsLeft = state.maxSubmissions;
+    state.timerTotal = 0;
+    state.timerRemaining = 0;
+    // Apply Speed Reader penalty (novelist only)
+    if (state.charms.some(c => c.id === 'speed_reader')) {
+      state.submissionsLeft = 3;
+    }
   }
 
   // Apply Librarian's Cat charm
@@ -469,7 +501,12 @@ function startRound(state) {
     state.activeTwist = STORY_TWISTS[state.floor % STORY_TWISTS.length];
     // Apply twist effects that modify round setup
     if (state.activeTwist.name === 'The Short Story') {
-      state.submissionsLeft = 3;
+      const ch = CHARACTERS[state.writer] || CHARACTERS.novelist;
+      if (ch.timed) {
+        state.timerRemaining = Math.floor(state.timerTotal * 0.6); // 60% time
+      } else {
+        state.submissionsLeft = 3;
+      }
     }
   } else {
     state.activeTwist = null;
@@ -526,7 +563,8 @@ function submitWord(state) {
   state.runScore += result.score;
   state.wordsThisRound.push(word);
   state.usedWords.add(word);
-  state.submissionsLeft--;
+  const char = CHARACTERS[state.writer] || CHARACTERS.novelist;
+  if (!char.timed) state.submissionsLeft--;
   state.wordsPlayed++;
   state.gold += result.bonusGold;
 
@@ -553,19 +591,28 @@ function submitWord(state) {
 function endRound(state) {
   const target = getTarget(state);
   const passed = state.roundScore >= target;
+  const char = CHARACTERS[state.writer] || CHARACTERS.novelist;
 
   if (passed) {
     state.pagesCleared++;
-    // Award gold
     const baseGold = PAGE_GOLD[state.page];
-    const bonusGold = state.submissionsLeft;
-    const interest = Math.min(5, Math.floor(state.gold / 5)); // +1 per 5 held, max +5
+    let bonusGold;
+    let bonusLabel;
+    if (char.timed) {
+      bonusGold = Math.floor(state.timerRemaining / 10);
+      bonusLabel = `${Math.floor(state.timerRemaining)}s remaining`;
+    } else {
+      bonusGold = state.submissionsLeft;
+      bonusLabel = `${bonusGold} unused submission${bonusGold !== 1 ? 's' : ''}`;
+    }
+    const interest = Math.min(5, Math.floor(state.gold / 5));
     state.gold += baseGold + bonusGold + interest;
 
     return {
       passed: true,
       baseGold,
       bonusGold,
+      bonusLabel,
       interest,
       totalGold: baseGold + bonusGold + interest,
       roundScore: state.roundScore,
@@ -820,7 +867,7 @@ function useInkCard(state, cardIndex) {
 }
 
 window.Game = {
-  FLOORS, PAGE_NAMES, PAGE_GOLD, STORY_TWISTS, ALL_CHARMS, NARRATOR,
+  FLOORS, PAGE_NAMES, PAGE_GOLD, STORY_TWISTS, ALL_CHARMS, NARRATOR, CHARACTERS,
   createGameState, getTarget, getFloorInfo, startRound, submitWord,
   endRound, advancePage, generateShopItems, buyShopItem,
   enchantDie, sellCharm,

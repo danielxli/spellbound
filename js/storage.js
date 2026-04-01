@@ -5,10 +5,11 @@ const KEYS = {
   stats: 'spellbound_stats',
   settings: 'spellbound_settings',
   tutorial: 'spellbound_tutorial_seen',
-  version: 'spellbound_save_version'
+  version: 'spellbound_save_version',
+  history: 'spellbound_history'
 };
 
-const SAVE_VERSION = 1;
+const SAVE_VERSION = 2;
 
 // ── Serialization helpers ──
 
@@ -36,6 +37,8 @@ function serializeState(state) {
   s.floorsCleared = state.floorsCleared;
   s.lengthBonuses = { ...state.lengthBonuses };
   s.letterBonuses = { ...state.letterBonuses };
+  s.timerTotal = state.timerTotal || 0;
+  s.timerRemaining = state.timerRemaining || 0;
 
   // Sets → arrays
   s.usedWords = [...state.usedWords];
@@ -123,6 +126,8 @@ function deserializeState(json) {
   state.floorsCleared = s.floorsCleared;
   state.lengthBonuses = s.lengthBonuses;
   state.letterBonuses = s.letterBonuses || {};
+  state.timerTotal = s.timerTotal || 0;
+  state.timerRemaining = s.timerRemaining || 0;
 
   // Sets
   state.usedWords = new Set(s.usedWords);
@@ -267,6 +272,41 @@ function saveSettings(settings) {
   }
 }
 
+// ── Run History ──
+
+const MAX_HISTORY = 20;
+
+function addRunToHistory(state) {
+  const history = loadHistory();
+  history.unshift({
+    date: new Date().toISOString(),
+    character: state.writer || 'novelist',
+    floorsCleared: state.floorsCleared,
+    score: state.runScore,
+    victory: state.phase === 'victory',
+    charms: state.charms.map(c => c.name),
+    longestWord: state.longestWord,
+    bestWordScore: state.bestWordScore,
+    wordsPlayed: state.wordsPlayed
+  });
+  if (history.length > MAX_HISTORY) history.length = MAX_HISTORY;
+  try {
+    localStorage.setItem(KEYS.history, JSON.stringify(history));
+  } catch (e) {
+    console.warn('Failed to save run history:', e);
+  }
+}
+
+function loadHistory() {
+  try {
+    const json = localStorage.getItem(KEYS.history);
+    if (!json) return [];
+    return JSON.parse(json);
+  } catch (e) {
+    return [];
+  }
+}
+
 // ── Tutorial ──
 
 function hasSeenTutorial() {
@@ -280,6 +320,7 @@ function markTutorialSeen() {
 window.Storage = {
   saveRun, loadRun, clearRun, hasRun,
   loadStats, updateStats,
+  addRunToHistory, loadHistory,
   loadSettings, saveSettings,
   hasSeenTutorial, markTutorialSeen
 };
