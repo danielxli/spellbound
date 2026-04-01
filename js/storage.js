@@ -35,6 +35,7 @@ function serializeState(state) {
   s.bestWordScore = state.bestWordScore;
   s.floorsCleared = state.floorsCleared;
   s.lengthBonuses = { ...state.lengthBonuses };
+  s.letterBonuses = { ...state.letterBonuses };
 
   // Sets → arrays
   s.usedWords = [...state.usedWords];
@@ -121,6 +122,7 @@ function deserializeState(json) {
   state.bestWordScore = s.bestWordScore;
   state.floorsCleared = s.floorsCleared;
   state.lengthBonuses = s.lengthBonuses;
+  state.letterBonuses = s.letterBonuses || {};
 
   // Sets
   state.usedWords = new Set(s.usedWords);

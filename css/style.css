@@ -2097,6 +2097,66 @@ html, body {
 }
 
 /* ═══ Safe Areas (Capacitor/PWA) ═══ */
+/* ── Stats Screen ── */
+.stats-screen {
+  text-align: left;
+}
+.stats-screen h3 {
+  color: var(--amber);
+  font-family: 'Crimson Text', serif;
+  font-size: 16px;
+  margin: 12px 0 6px;
+  text-align: center;
+}
+.stats-section {
+  width: 100%;
+  margin-bottom: 8px;
+}
+.stats-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.stats-table th {
+  color: var(--cream-dim);
+  font-weight: normal;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--brown-dim);
+  text-align: left;
+}
+.stats-table td {
+  padding: 3px 8px;
+  color: var(--cream);
+}
+.stats-table .stats-letter {
+  font-weight: bold;
+  min-width: 60px;
+}
+.stats-table .stats-total {
+  color: var(--amber);
+  font-weight: bold;
+  text-align: right;
+}
+.stats-table .stats-value {
+  color: var(--cream-dim);
+}
+.stats-bonus {
+  color: var(--gold);
+  font-weight: bold;
+  margin-left: 2px;
+}
+.stats-tier-header td {
+  color: var(--cream-dim);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding-top: 8px;
+  border-bottom: 1px solid var(--brown-dim);
+}
+
 @supports (padding-top: env(safe-area-inset-top)) {
   #app {
     padding-top: env(safe-area-inset-top);

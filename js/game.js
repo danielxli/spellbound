@@ -274,19 +274,21 @@ function detectPatterns(word) {
 function scoreWord(word, cells, gameState) {
   const { LETTER_CHIPS, LETTER_TIERS, getWordLengthMult } = window.GameDice;
 
-  // Per-letter chip breakdown (includes per-die upgrades)
+  // Per-letter chip breakdown (includes per-die upgrades + letter upgrades)
   const letterDetails = cells.map(cell => {
     const base = LETTER_CHIPS[cell.letter] || 2;
     const dieBonus = cell.die.bonusChips || 0;
+    const letterBonus = gameState.letterBonuses[cell.letter] || 0;
     const dieMult = cell.die.bonusMult || 0;
     return {
       letter: cell.letter === 'QU' ? 'Qu' : cell.letter,
-      chips: base + dieBonus,
+      chips: base + dieBonus + letterBonus,
       baseChips: base,
       dieBonus,
+      letterBonus,
       dieMult,
       tier: LETTER_TIERS[cell.letter] || 'common',
-      upgraded: dieBonus > 0
+      upgraded: dieBonus > 0 || letterBonus > 0
     };
   });
 
@@ -409,6 +411,9 @@ function createGameState() {
 
     // Word-type upgrades: bonus mult per word length (like Balatro planet cards)
     lengthBonuses: { 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0, 10: 0 },
+
+    // Letter upgrades: bonus chips per letter (uncapped, scaling cost)
+    letterBonuses: {},
 
     // Phase: 'title' | 'playing' | 'scoring' | 'pageResult' | 'shop' | 'skipChoice' | 'gameOver' | 'victory'
     phase: 'title',
@@ -668,15 +673,25 @@ function generateShopItems(state) {
     cost: upgradeCost
   });
 
-  // ── 1 Die upgrade (pick a die, +5 chips permanently) ──
+  // ── 1 Letter upgrade (+1 chip to a specific letter, uncapped) ──
+  const LETTER_CHIPS = GameDice.LETTER_CHIPS;
+  const allLetters = Object.keys(LETTER_CHIPS).filter(l => l !== 'Q'); // QU is the usable form
+  const targetLetter = allLetters[Math.floor(Math.random() * allLetters.length)];
+  const currentLetterBonus = state.letterBonuses[targetLetter] || 0;
+  const letterUpgradeCost = 3 + currentLetterBonus * 2; // scales with level
+  const displayLetter = targetLetter === 'QU' ? 'Qu' : targetLetter;
+  const baseCh = LETTER_CHIPS[targetLetter] || 2;
   items.push({
-    type: 'die_upgrade',
+    type: 'letter_upgrade',
     data: {
-      name: 'Sharpen a Die',
-      flavor: 'Choose a die. Every face cuts deeper.',
-      chipBonus: 5
+      letter: targetLetter,
+      name: `Inscribe: ${displayLetter}`,
+      flavor: 'The letter glows brighter on every die.',
+      currentBonus: currentLetterBonus,
+      newBonus: currentLetterBonus + 1,
+      baseChips: baseCh
     },
-    cost: 5
+    cost: letterUpgradeCost
   });
 
   // ── 1 Die enchantment (transform an existing die) ──
@@ -745,9 +760,12 @@ function buyShopItem(state, item) {
       return { success: true, msg: `${len}-letter words now have +${state.lengthBonuses[len]} bonus mult!` };
     }
 
-    case 'die_upgrade':
-      // Requires picking a die — returns 'pick_die' signal for UI to handle
-      return { success: true, msg: 'pick_die', pickDie: true, chipBonus: item.data.chipBonus };
+    case 'letter_upgrade': {
+      const letter = item.data.letter;
+      state.letterBonuses[letter] = (state.letterBonuses[letter] || 0) + 1;
+      const dl = letter === 'QU' ? 'Qu' : letter;
+      return { success: true, msg: `${dl} now has +${state.letterBonuses[letter]} bonus chips!` };
+    }
 
     case 'die_enchant':
       // Requires picking a die — returns signal for UI to handle
@@ -756,19 +774,6 @@ function buyShopItem(state, item) {
     default:
       return { success: false, reason: 'Unknown item.' };
   }
-}
-
-// Apply die upgrade to a specific die in the bag (max 3 upgrades per die = +15)
-const MAX_DIE_UPGRADES = 3;
-const DIE_UPGRADE_CHIPS = 5;
-
-function upgradeDie(state, dieIndex, chipBonus) {
-  const die = state.diceBag[dieIndex];
-  if (!die) return false;
-  const currentLevel = Math.round((die.bonusChips || 0) / DIE_UPGRADE_CHIPS);
-  if (currentLevel >= MAX_DIE_UPGRADES) return false;
-  die.bonusChips = (die.bonusChips || 0) + chipBonus;
-  return true;
 }
 
 function enchantDie(state, dieIndex, enchant) {
@@ -782,9 +787,6 @@ function enchantDie(state, dieIndex, enchant) {
   return true;
 }
 
-function getDieUpgradeLevel(die) {
-  return Math.round((die.bonusChips || 0) / DIE_UPGRADE_CHIPS);
-}
 
 // Sell a charm — get half its cost back (rounded up), free the slot
 function sellCharm(state, charmIndex) {
@@ -821,7 +823,7 @@ window.Game = {
   FLOORS, PAGE_NAMES, PAGE_GOLD, STORY_TWISTS, ALL_CHARMS, NARRATOR,
   createGameState, getTarget, getFloorInfo, startRound, submitWord,
   endRound, advancePage, generateShopItems, buyShopItem,
-  upgradeDie, enchantDie, getDieUpgradeLevel, sellCharm, MAX_DIE_UPGRADES, DIE_UPGRADE_CHIPS,
+  enchantDie, sellCharm,
   useInkCard, scoreWord, detectPatterns, hasDoubleLetter, hasConsonantRun,
   isBookend, isVowelHeavy, isAllUnique
 };

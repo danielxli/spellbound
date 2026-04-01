@@ -95,6 +95,10 @@ function handleKeydown(e) {
     closeSettings();
     return;
   }
+  if (e.key === 'Escape' && document.getElementById('stats-overlay')) {
+    closeStatsScreen();
+    return;
+  }
 
   if (state.phase === 'playing' && !scoringAnimationActive) {
     if (e.key === 'Enter') doSubmitWord();
@@ -1120,7 +1124,7 @@ function proceedFromResult() {
 
 // ── Shop Screen ──
 const SHOP_ICONS = {
-  charm: '✦', die_upgrade: '⬡', die_enchant: '◈', length_upgrade: '↑', ink_card: '🪶', remove_die: '✂'
+  charm: '✦', letter_upgrade: '✎', die_enchant: '◈', length_upgrade: '↑', ink_card: '🪶', remove_die: '✂'
 };
 
 function renderShop() {
@@ -1173,11 +1177,11 @@ function renderShop() {
         flavor = item.data.flavor;
         typeName = 'word upgrade';
         break;
-      case 'die_upgrade':
+      case 'letter_upgrade':
         name = item.data.name;
-        desc = `Pick a die — +${item.data.chipBonus} chips permanently`;
+        desc = `${item.data.letter === 'QU' ? 'Qu' : item.data.letter}: ${item.data.baseChips}+${item.data.currentBonus} → ${item.data.baseChips}+${item.data.newBonus} chips`;
         flavor = item.data.flavor;
-        typeName = 'die upgrade';
+        typeName = 'letter upgrade';
         break;
     }
 
@@ -1251,11 +1255,7 @@ function buyItem(index) {
   if (result.success) {
     if (result.pickDie) {
       item.sold = true;
-      if (result.enchant) {
-        showEnchantPicker(result.enchant);
-      } else {
-        showDiePicker(result.chipBonus);
-      }
+      showEnchantPicker(result.enchant);
       renderShop();
       return;
     }
@@ -1267,69 +1267,6 @@ function buyItem(index) {
   }
   Storage.saveRun(state);
   renderShop();
-}
-
-// ── Die Picker: choose which die to upgrade ──
-function showDiePicker(chipBonus) {
-  const overlay = document.createElement('div');
-  overlay.className = 'overlay';
-  overlay.innerHTML = `
-    <div class="overlay-card" style="max-width: 440px;">
-      <h2>Sharpen a Die</h2>
-      <p style="color: var(--cream-dim); font-size: 13px;">Choose a die to upgrade (+${chipBonus} chips). Max ${Game.MAX_DIE_UPGRADES} upgrades per die.</p>
-      <div id="die-picker-grid" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; width: 100%;"></div>
-    </div>
-  `;
-  document.getElementById('app').appendChild(overlay);
-
-  const grid = document.getElementById('die-picker-grid');
-  const { LETTER_CHIPS, LETTER_TIERS } = window.GameDice;
-
-  state.diceBag.forEach((die, i) => {
-    if (i >= 16) return;
-    const sampleLetter = die.faces[0] === 'Q' ? 'QU' : die.faces[0];
-    const tier = LETTER_TIERS[sampleLetter] || 'common';
-    const currentBonus = die.bonusChips || 0;
-    const level = Game.getDieUpgradeLevel(die);
-    const maxed = level >= Game.MAX_DIE_UPGRADES;
-    const faces = die.faces.map(f => f === 'Q' ? 'Qu' : f).join(' ');
-    const pips = '★'.repeat(level) + '☆'.repeat(Game.MAX_DIE_UPGRADES - level);
-
-    const div = document.createElement('div');
-    div.className = 'die-cell';
-    div.style.position = 'relative';
-    if (currentBonus > 0) {
-      div.style.borderColor = '#d4a04a';
-      div.style.boxShadow = '0 0 8px rgba(212,160,74,0.3)';
-    }
-    if (maxed) {
-      div.style.opacity = '0.4';
-      div.style.cursor = 'not-allowed';
-    } else {
-      div.style.cursor = 'pointer';
-    }
-
-    div.innerHTML = `
-      <span class="die-letter tier-${tier}" style="font-size: 14px;">${faces}</span>
-      <span class="die-chips">${currentBonus > 0 ? `+${currentBonus}` : ''}</span>
-      <span style="position:absolute;bottom:1px;left:50%;transform:translateX(-50%);font-size:8px;color:#d4a04a;">${pips}</span>
-    `;
-    div.title = maxed
-      ? `MAX LEVEL — ${faces} (+${currentBonus} chips)`
-      : `${faces} | +${currentBonus} → +${currentBonus + chipBonus} chips (${level}/${Game.MAX_DIE_UPGRADES})`;
-
-    if (!maxed) {
-      div.addEventListener('click', () => {
-        Game.upgradeDie(state, i, chipBonus);
-        overlay.remove();
-        const newLevel = Game.getDieUpgradeLevel(die);
-        showToast(`Die sharpened! [${faces}] now +${die.bonusChips} chips (${'★'.repeat(newLevel)})`);
-        renderShop();
-      });
-    }
-
-    grid.appendChild(div);
-  });
 }
 
 // ── Enchant Picker: choose which die to enchant ──
@@ -1572,6 +1509,7 @@ function showPause() {
       <h2>Paused</h2>
       <div style="display: flex; flex-direction: column; gap: 10px; width: 100%; align-items: center;">
         <button class="btn btn-gold" onclick="closePause()">Resume</button>
+        <button class="btn btn-small" onclick="closePause(); showStatsScreen();">View Build</button>
         <button class="btn btn-small" onclick="closePause(); showSettings();">Settings</button>
         <button class="btn btn-small btn-red" onclick="confirmQuit()">Quit Run</button>
       </div>
@@ -1664,6 +1602,73 @@ function animDelay(ms) {
   return ms / Settings.get('animSpeed');
 }
 
+// ── Stats Screen: letter scores + word multipliers ──
+function showStatsScreen() {
+  if (document.getElementById('stats-overlay')) return;
+
+  const { LETTER_CHIPS, LETTER_TIERS, LENGTH_MULT } = window.GameDice;
+
+  // Build letter table — group by tier
+  const tiers = ['common', 'uncommon', 'rare', 'epic', 'legendary'];
+  const tierLabels = { common: 'Common', uncommon: 'Uncommon', rare: 'Rare', epic: 'Epic', legendary: 'Legendary' };
+
+  let letterRows = '';
+  for (const tier of tiers) {
+    const letters = Object.keys(LETTER_TIERS).filter(l => LETTER_TIERS[l] === tier && l !== 'Q');
+    if (letters.length === 0) continue;
+    letterRows += `<tr class="stats-tier-header"><td colspan="3">${tierLabels[tier]}</td></tr>`;
+    for (const letter of letters) {
+      const base = LETTER_CHIPS[letter] || 2;
+      const bonus = (state.letterBonuses && state.letterBonuses[letter]) || 0;
+      const display = letter === 'QU' ? 'Qu' : letter;
+      const bonusStr = bonus > 0 ? `<span class="stats-bonus">+${bonus}</span>` : '';
+      letterRows += `<tr class="tier-${tier}"><td class="stats-letter">${display}</td><td class="stats-value">${base}${bonusStr}</td><td class="stats-total">${base + bonus}</td></tr>`;
+    }
+  }
+
+  // Build word length table
+  let lengthRows = '';
+  for (let len = 3; len <= 10; len++) {
+    const baseMult = LENGTH_MULT[len] || 1;
+    const bonus = (state.lengthBonuses && state.lengthBonuses[len]) || 0;
+    const bonusStr = bonus > 0 ? `<span class="stats-bonus">+${bonus}</span>` : '';
+    lengthRows += `<tr><td class="stats-letter">${len} letters</td><td class="stats-value">${baseMult}${bonusStr}</td><td class="stats-total">${baseMult + bonus}x</td></tr>`;
+  }
+
+  const div = document.createElement('div');
+  div.className = 'overlay';
+  div.id = 'stats-overlay';
+  div.innerHTML = `
+    <div class="overlay-card stats-screen" style="max-width: 400px; max-height: 80vh; overflow-y: auto;">
+      <h2>Your Build</h2>
+
+      <div class="stats-section">
+        <h3>Word Length Multipliers</h3>
+        <table class="stats-table">
+          <thead><tr><th>Length</th><th>Base</th><th>Total</th></tr></thead>
+          <tbody>${lengthRows}</tbody>
+        </table>
+      </div>
+
+      <div class="stats-section">
+        <h3>Letter Chip Values</h3>
+        <table class="stats-table">
+          <thead><tr><th>Letter</th><th>Base</th><th>Total</th></tr></thead>
+          <tbody>${letterRows}</tbody>
+        </table>
+      </div>
+
+      <button class="btn btn-gold" onclick="closeStatsScreen()">Close</button>
+    </div>
+  `;
+  document.getElementById('app').appendChild(div);
+}
+
+function closeStatsScreen() {
+  const el = document.getElementById('stats-overlay');
+  if (el) el.remove();
+}
+
 // Global exports
 window.startGame = startGame;
 window.clearSelection = clearSelection;
@@ -1679,6 +1684,8 @@ window.confirmQuit = confirmQuit;
 window.quitRun = quitRun;
 window.showSettings = showSettings;
 window.closeSettings = closeSettings;
+window.showStatsScreen = showStatsScreen;
+window.closeStatsScreen = closeStatsScreen;
 window.resumeGame = resumeGame;
 
 // Start

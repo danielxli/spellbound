@@ -5,7 +5,7 @@
 <title>Spellbound Playtest Viz</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { background: #1a1410; color: #e8dcc8; font-family: 'Courier New', monospace; font-size: 13px; padding: 24px; max-width: 1200px; margin: 0 auto; }
+  body { background: #1a1410; color: #e8dcc8; font-family: 'Courier New', monospace; font-size: 13px; padding: 24px; max-width: 1400px; margin: 0 auto; }
   h1 { font-family: Georgia, serif; font-size: 28px; color: #d4a04a; margin-bottom: 4px; }
   h2 { font-family: Georgia, serif; font-size: 18px; color: #d4a04a; margin: 24px 0 12px; border-bottom: 1px solid #3a2f24; padding-bottom: 6px; }
   h3 { font-size: 14px; color: #c8b89a; margin: 16px 0 8px; }
@@ -13,6 +13,7 @@
   .grid { display: grid; gap: 16px; }
   .grid-2 { grid-template-columns: 1fr 1fr; }
   .grid-3 { grid-template-columns: 1fr 1fr 1fr; }
+  .grid-6 { grid-template-columns: repeat(6, 1fr); }
   .card { background: #2a2118; border: 1px solid #3a2f24; border-radius: 8px; padding: 16px; }
   .stat-big { font-family: Georgia, serif; font-size: 36px; color: #d4a04a; }
   .stat-label { font-size: 11px; color: #9a8a72; text-transform: uppercase; letter-spacing: 1px; margin-top: 4px; }
@@ -45,7 +46,6 @@
   .rarity-uncommon .charm-fill { background: #4a9a4a; }
   .rarity-rare .charm-fill { background: #4a7ab0; }
   .rarity-legendary .charm-fill { background: #d4a04a; }
-  .death-dot { display: inline-block; width: 14px; height: 14px; border-radius: 2px; margin: 1px; }
   table { border-collapse: collapse; width: 100%; font-size: 12px; }
   th { text-align: left; color: #9a8a72; font-weight: normal; text-transform: uppercase; font-size: 10px; letter-spacing: 1px; padding: 4px 8px; border-bottom: 1px solid #3a2f24; }
   td { padding: 4px 8px; border-bottom: 1px solid #2a2118; }
@@ -53,6 +53,12 @@
   .warn { color: #d4a04a; }
   .fail { color: #c44040; }
   #loading { text-align: center; padding: 60px; color: #9a8a72; }
+  .profile-tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; }
+  .profile-avg { background: #3a2f24; color: #d4a04a; }
+  .profile-smart { background: #1a3a2a; color: #4a9a4a; }
+  .dual-bar { display: flex; gap: 2px; height: 20px; }
+  .dual-bar .bar-avg { background: linear-gradient(90deg, #8a6a2e, #d4a04a); border-radius: 3px 0 0 3px; height: 100%; }
+  .dual-bar .bar-smart { background: linear-gradient(90deg, #2a6a2a, #4a9a4a); border-radius: 0 3px 3px 0; height: 100%; }
 </style>
 </head>
 <body>
@@ -71,6 +77,32 @@ class FastTrie {
   insert(w) { let n = this.root; for (const c of w) { if (!n[c]) n[c] = {}; n = n[c]; } n.$ = true; }
   check(s) { let n = this.root; for (const c of s) { if (!n[c]) return 'none'; n = n[c]; } return n.$ ? 'word' : 'prefix'; }
 }
+
+// ── AI Profiles ──
+const PROFILES = {
+  average: {
+    name: 'Average',
+    maxWordLen: 5,
+    wordPickTopN: 5,
+    earlyFinishChance: 0.4,
+    useExtraInkThreshold: 500,
+    shopPrioritize: false,
+    interestAware: false,
+    sellCharms: false,
+    skipBadWords: false,
+  },
+  smart: {
+    name: 'Smart',
+    maxWordLen: 7,
+    wordPickTopN: 1,
+    earlyFinishChance: 1.0,
+    useExtraInkThreshold: 1000,
+    shopPrioritize: true,
+    interestAware: true,
+    sellCharms: true,
+    skipBadWords: true,
+  }
+};
 
 async function run() {
   await GameDictionary.initDictionary();
@@ -118,20 +150,26 @@ async function run() {
     return v;
   }
 
-  function simRound(state) {
+  function simRound(state, profile) {
     Game.startRound(state); const wp = []; const target = Game.getTarget(state); let sixUsed = false;
-    // Use Extra Ink on hard pages
     const extraInkIdx = state.inkCards.findIndex(c => c.id === 'extra_ink');
-    if (extraInkIdx >= 0 && target >= 1000) Game.useInkCard(state, extraInkIdx);
+    if (extraInkIdx >= 0 && target >= profile.useExtraInkThreshold) Game.useInkCard(state, extraInkIdx);
     while (state.submissionsLeft > 0) {
-      if (state.roundScore >= target && wp.length > 0) break;
-      let avail = findWords(state.grid, sixUsed ? 5 : 6).filter(w => {
+      if (state.roundScore >= target && wp.length > 0) {
+        if (Math.random() < profile.earlyFinishChance) break;
+      }
+      const maxLen = sixUsed ? Math.min(profile.maxWordLen, 5) : profile.maxWordLen;
+      let avail = findWords(state.grid, maxLen).filter(w => {
         if (state.activeTwist?.name === 'The Sequel' && state.usedWords.has(w.word)) return false;
         if (state.activeTwist?.name === 'Banned Books' && w.word.length === 3) return false;
         if (state.activeTwist?.name === 'Purple Prose' && w.word.length < 5) return false;
         return true;
       });
-      if (avail.length > 1 && Math.random() < 0.3) {
+      if (profile.skipBadWords && avail.length > 1) {
+        const nonTrivial = avail.filter(w => w.word.length >= 4);
+        if (nonTrivial.length > 0) avail = nonTrivial;
+      }
+      if (!profile.skipBadWords && avail.length > 1 && Math.random() < 0.3) {
         const fours = avail.filter(w => w.word.length === 4);
         if (fours.length > 0) avail = [fours[0], ...avail.filter(w => w.word.length !== 4)];
       }
@@ -141,7 +179,10 @@ async function run() {
         if (state.submissionsLeft > 1) { state.submissionsLeft--; GameDice.shakeGrid(state.grid); state.selectedCells = []; continue; }
         break;
       }
-      const pick = avail[0]; if (pick.word.length >= 6) sixUsed = true;
+      let pick;
+      if (profile.wordPickTopN <= 1) { pick = avail[0]; }
+      else { const topN = avail.slice(0, Math.min(profile.wordPickTopN, avail.length)); pick = topN[Math.floor(Math.random() * topN.length)]; }
+      if (pick.word.length >= 6) sixUsed = true;
       state.selectedCells = pick.cells;
       const r = Game.submitWord(state);
       if (r.success) wp.push({ word: pick.word, score: r.result.score, len: pick.word.length }); else break;
@@ -149,45 +190,49 @@ async function run() {
     return { wordsPlayed: wp, roundScore: state.roundScore, unusedSubs: state.submissionsLeft };
   }
 
-  function simShop(state) {
+  function simShop(state, profile) {
     const items = Game.generateShopItems(state);
-    const ro = { legendary:0, rare:1, uncommon:2, common:3 };
-    items.sort((a,b) => {
-      const to = { charm:0, die_upgrade:1, length_upgrade:2, die_enchant:3, ink_card:4 };
-      const ta=to[a.type]??9, tb=to[b.type]??9;
-      if(ta!==tb) return ta-tb;
-      if(a.type==='charm'&&b.type==='charm') return (ro[a.data.rarity]??9)-(ro[b.data.rarity]??9);
-      return 0;
-    });
+    if (profile.shopPrioritize) {
+      const ro = { legendary:0, rare:1, uncommon:2, common:3 };
+      items.sort((a,b) => {
+        const to = { charm:0, letter_upgrade:1, length_upgrade:2, die_enchant:3, ink_card:4 };
+        const ta=to[a.type]??9, tb=to[b.type]??9;
+        if(ta!==tb) return ta-tb;
+        if(a.type==='charm'&&b.type==='charm') return (ro[a.data.rarity]??9)-(ro[b.data.rarity]??9);
+        return 0;
+      });
+    }
     for (const item of items) {
       if (item.type === 'charm' && state.charms.length >= state.maxCharms) {
-        const nv = charmValue(item.data, state);
-        let wi = -1, wv = Infinity;
-        for (let i = 0; i < state.charms.length; i++) { const v = charmValue(state.charms[i], state); if (v < wv) { wv = v; wi = i; } }
-        if (wi >= 0 && nv > wv + 3) Game.sellCharm(state, wi);
+        if (profile.sellCharms) {
+          const nv = charmValue(item.data, state);
+          let wi = -1, wv = Infinity;
+          for (let i = 0; i < state.charms.length; i++) { const v = charmValue(state.charms[i], state); if (v < wv) { wv = v; wi = i; } }
+          if (wi >= 0 && nv > wv + 3) Game.sellCharm(state, wi);
+        }
       }
       if (state.gold < item.cost) continue;
       if (item.type === 'charm' && state.charms.length >= state.maxCharms) continue;
-      // Interest-aware: skip cheap upgrades if they'd drop an interest bracket
-      const curInt = Math.min(5, Math.floor(state.gold / 5));
-      const aftInt = Math.min(5, Math.floor((state.gold - item.cost) / 5));
-      if (aftInt < curInt && item.type !== 'charm' && item.cost <= 5) continue;
+      if (profile.interestAware) {
+        const curInt = Math.min(5, Math.floor(state.gold / 5));
+        const aftInt = Math.min(5, Math.floor((state.gold - item.cost) / 5));
+        if (aftInt < curInt && item.type !== 'charm' && item.cost <= 5) continue;
+      }
       const r = Game.buyShopItem(state, item);
-      if (r.success && r.pickDie) {
-        if (r.enchant) { for (let i = 0; i < 16; i++) { if (state.diceBag[i]?.type === 'standard') { Game.enchantDie(state, i, r.enchant); break; } } }
-        else { for (let i = 0; i < 16; i++) { if (state.diceBag[i] && Game.getDieUpgradeLevel(state.diceBag[i]) < Game.MAX_DIE_UPGRADES) { Game.upgradeDie(state, i, r.chipBonus); break; } } }
+      if (r.success && r.pickDie && r.enchant) {
+        for (let i = 0; i < 16; i++) { if (state.diceBag[i]?.type === 'standard') { Game.enchantDie(state, i, r.enchant); break; } }
       }
     }
   }
 
-  function simRun() {
+  function simRun(profile) {
     const state = Game.createGameState();
     const log = { floorsCleared:0, wordsPlayed:0, totalScore:0, victory:false, charms:[], diedAt:null, pages:[], allWords:[], goldEarned:0, goldSpent:0 };
     for (let floor = 0; floor < NUM_FLOORS; floor++) {
       for (let page = 0; page < 3; page++) {
         state.floor = floor; state.page = page;
         const target = Game.getTarget(state);
-        const { wordsPlayed, roundScore, unusedSubs } = simRound(state);
+        const { wordsPlayed, roundScore, unusedSubs } = simRound(state, profile);
         log.wordsPlayed += wordsPlayed.length; log.totalScore += roundScore;
         for (const w of wordsPlayed) log.allWords.push(w);
         log.pages.push({ floor:floor+1, page:['O','R','F'][page], target, score:roundScore, passed:roundScore>=target, words:wordsPlayed.length, unusedSubs });
@@ -197,175 +242,238 @@ async function run() {
         Game.advancePage(state);
         if (state.phase === 'victory') { log.victory = true; log.floorsCleared = NUM_FLOORS; log.charms = state.charms.map(c=>({name:c.name,rarity:c.rarity})); return log; }
         const gb = state.gold;
-        simShop(state);
+        simShop(state, profile);
         log.goldSpent += gb - state.gold;
       }
     }
     log.floorsCleared = state.floorsCleared; log.charms = state.charms.map(c=>({name:c.name,rarity:c.rarity})); return log;
   }
 
-  // Run sims
+  // ── Run sims for both profiles ──
   const N = 30;
-  const results = [];
-  for (let i = 0; i < N; i++) results.push(simRun());
+  const avgResults = [], smartResults = [];
+  document.getElementById('loading').textContent = 'Running Average player...';
+  await new Promise(r => setTimeout(r, 10));
+  for (let i = 0; i < N; i++) avgResults.push(simRun(PROFILES.average));
+  document.getElementById('loading').textContent = 'Running Smart player...';
+  await new Promise(r => setTimeout(r, 10));
+  for (let i = 0; i < N; i++) smartResults.push(simRun(PROFILES.smart));
 
   // ── Build dashboard ──
   const d = document.getElementById('dashboard');
   d.style.display = 'block';
   document.getElementById('loading').style.display = 'none';
 
-  const victories = results.filter(r=>r.victory).length;
-  const avgFloor = (results.reduce((s,r)=>s+r.floorsCleared,0)/N).toFixed(1);
-  const avgWords = Math.round(results.reduce((s,r)=>s+r.wordsPlayed,0)/N);
-  const avgScore = Math.round(results.reduce((s,r)=>s+r.totalScore,0)/N);
-  const avgGoldE = Math.round(results.reduce((s,r)=>s+r.goldEarned,0)/N);
-  const avgGoldS = Math.round(results.reduce((s,r)=>s+r.goldSpent,0)/N);
+  function stats(results) {
+    const victories = results.filter(r=>r.victory).length;
+    const avgFloor = (results.reduce((s,r)=>s+r.floorsCleared,0)/N).toFixed(1);
+    const avgWords = Math.round(results.reduce((s,r)=>s+r.wordsPlayed,0)/N);
+    const avgScore = Math.round(results.reduce((s,r)=>s+r.totalScore,0)/N);
+    const avgGoldE = Math.round(results.reduce((s,r)=>s+r.goldEarned,0)/N);
+    const avgGoldS = Math.round(results.reduce((s,r)=>s+r.goldSpent,0)/N);
+    const avgSaved = (results.flatMap(r=>r.pages).reduce((s,p)=>s+p.unusedSubs,0) / results.flatMap(r=>r.pages).length).toFixed(1);
+    return { victories, avgFloor, avgWords, avgScore, avgGoldE, avgGoldS, avgSaved, N };
+  }
 
-  // Summary cards
+  const as = stats(avgResults), ss = stats(smartResults);
+
+  // ── Comparison cards ──
   d.innerHTML = `
-    <div class="grid grid-3" style="margin-bottom:16px;">
-      <div class="card"><div class="stat-big">${victories}/${N}</div><div class="stat-label">Win Rate (${Math.round(victories/N*100)}%)</div></div>
-      <div class="card"><div class="stat-big">${avgFloor}</div><div class="stat-label">Avg Floor Reached</div></div>
-      <div class="card"><div class="stat-big">${avgScore.toLocaleString()}</div><div class="stat-label">Avg Score</div></div>
-    </div>
-    <div class="grid grid-3" style="margin-bottom:8px;">
-      <div class="card"><div class="stat-big" style="font-size:24px;">${avgWords}</div><div class="stat-label">Avg Words / Run</div></div>
-      <div class="card"><div class="stat-big" style="font-size:24px;color:#ffd700;">${avgGoldE}g</div><div class="stat-label">Avg Gold Earned</div></div>
-      <div class="card"><div class="stat-big" style="font-size:24px;color:#c44040;">${avgGoldS}g</div><div class="stat-label">Avg Gold Spent</div></div>
+    <h2>Comparison: <span class="profile-tag profile-avg">Average</span> vs <span class="profile-tag profile-smart">Smart</span></h2>
+    <div class="grid grid-6" style="margin-bottom:16px;">
+      <div class="card">
+        <div class="stat-label">Win Rate</div>
+        <div style="display:flex;gap:8px;align-items:baseline;margin-top:4px;">
+          <div class="stat-big" style="font-size:24px;color:#d4a04a;">${Math.round(as.victories/N*100)}%</div>
+          <div style="color:#9a8a72;">vs</div>
+          <div class="stat-big" style="font-size:24px;color:#4a9a4a;">${Math.round(ss.victories/N*100)}%</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="stat-label">Avg Floor</div>
+        <div style="display:flex;gap:8px;align-items:baseline;margin-top:4px;">
+          <div class="stat-big" style="font-size:24px;color:#d4a04a;">${as.avgFloor}</div>
+          <div style="color:#9a8a72;">vs</div>
+          <div class="stat-big" style="font-size:24px;color:#4a9a4a;">${ss.avgFloor}</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="stat-label">Avg Score</div>
+        <div style="display:flex;gap:8px;align-items:baseline;margin-top:4px;">
+          <div class="stat-big" style="font-size:20px;color:#d4a04a;">${as.avgScore.toLocaleString()}</div>
+          <div style="color:#9a8a72;">vs</div>
+          <div class="stat-big" style="font-size:20px;color:#4a9a4a;">${ss.avgScore.toLocaleString()}</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="stat-label">Avg Words/Run</div>
+        <div style="display:flex;gap:8px;align-items:baseline;margin-top:4px;">
+          <div class="stat-big" style="font-size:24px;color:#d4a04a;">${as.avgWords}</div>
+          <div style="color:#9a8a72;">vs</div>
+          <div class="stat-big" style="font-size:24px;color:#4a9a4a;">${ss.avgWords}</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="stat-label">Avg Gold Earned</div>
+        <div style="display:flex;gap:8px;align-items:baseline;margin-top:4px;">
+          <div class="stat-big" style="font-size:24px;color:#d4a04a;">${as.avgGoldE}g</div>
+          <div style="color:#9a8a72;">vs</div>
+          <div class="stat-big" style="font-size:24px;color:#4a9a4a;">${ss.avgGoldE}g</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="stat-label">Avg Saved Subs</div>
+        <div style="display:flex;gap:8px;align-items:baseline;margin-top:4px;">
+          <div class="stat-big" style="font-size:24px;color:#d4a04a;">${as.avgSaved}</div>
+          <div style="color:#9a8a72;">vs</div>
+          <div class="stat-big" style="font-size:24px;color:#4a9a4a;">${ss.avgSaved}</div>
+        </div>
+      </div>
     </div>
   `;
 
-  // Survival funnel
+  // ── Survival funnel (dual bars) ──
   let survivalHTML = '<h2>Survival Funnel</h2>';
   for (let f = 1; f <= NUM_FLOORS; f++) {
-    const survived = results.filter(r => r.floorsCleared >= f).length;
-    const pct = Math.round(survived / N * 100);
-    const color = pct >= 80 ? 'green' : pct >= 40 ? 'amber' : pct >= 15 ? 'red' : 'red';
+    const aSurv = results => results.filter(r => r.floorsCleared >= f).length;
+    const aPct = Math.round(aSurv(avgResults) / N * 100);
+    const sPct = Math.round(aSurv(smartResults) / N * 100);
     const label = f === NUM_FLOORS ? ' (Victory)' : '';
     survivalHTML += `<div class="bar-row">
       <div class="bar-label">Floor ${f}${label}</div>
-      <div class="bar-container"><div class="bar-fill ${color}" style="width:${pct}%"><span class="bar-pct">${pct}%</span></div></div>
-      <div class="bar-value">${survived}/${N}</div>
+      <div class="bar-container" style="position:relative;">
+        <div class="bar-fill amber" style="width:${aPct}%;position:absolute;top:0;left:0;opacity:0.7;height:50%;"><span class="bar-pct" style="font-size:9px;top:0;">${aPct}%</span></div>
+        <div class="bar-fill green" style="width:${sPct}%;position:absolute;bottom:0;left:0;opacity:0.7;height:50%;"><span class="bar-pct" style="font-size:9px;top:0;">${sPct}%</span></div>
+      </div>
+      <div class="bar-value" style="font-size:11px;">${aSurv(avgResults)}/${aSurv(smartResults)}</div>
     </div>`;
   }
+  survivalHTML += `<div style="font-size:11px;color:#9a8a72;margin-top:4px;text-align:right;"><span style="color:#d4a04a;">■</span> Average &nbsp; <span style="color:#4a9a4a;">■</span> Smart</div>`;
   d.innerHTML += survivalHTML;
 
-  // Pass rates table
-  let tableHTML = '<h2>Page Pass Rates</h2><table><tr><th>Page</th><th>Pass</th><th>%</th><th>Avg Score</th><th>Target</th><th>Words</th><th>Saved</th><th></th></tr>';
+  // ── Pass rates table (both profiles) ──
+  let tableHTML = '<h2>Page Pass Rates</h2><table><tr><th>Page</th><th colspan="2">Average</th><th colspan="2">Smart</th><th>Avg Targets</th></tr>';
   for (let f = 1; f <= NUM_FLOORS; f++) {
     for (const p of ['O','R','F']) {
-      const pgs = results.flatMap(r=>r.pages).filter(pg=>pg.floor===f&&pg.page===p);
-      if (!pgs.length) continue;
-      const passed = pgs.filter(pg=>pg.passed).length;
-      const avg = Math.round(pgs.reduce((s,pg)=>s+pg.score,0)/pgs.length);
-      const avgW = (pgs.reduce((s,pg)=>s+pg.words,0)/pgs.length).toFixed(1);
-      const avgU = (pgs.reduce((s,pg)=>s+pg.unusedSubs,0)/pgs.length).toFixed(1);
-      const pct = Math.round(passed/pgs.length*100);
-      const cls = pct >= 80 ? 'pass' : pct >= 40 ? 'warn' : 'fail';
+      const aPgs = avgResults.flatMap(r=>r.pages).filter(pg=>pg.floor===f&&pg.page===p);
+      const sPgs = smartResults.flatMap(r=>r.pages).filter(pg=>pg.floor===f&&pg.page===p);
+      if (!aPgs.length && !sPgs.length) continue;
       const pName = {O:'Opening',R:'Rising',F:'Final'}[p];
-      tableHTML += `<tr><td>F${f} ${pName}</td><td>${passed}/${pgs.length}</td><td class="${cls}">${pct}%</td><td>${avg.toLocaleString()}</td><td>${pgs[0].target.toLocaleString()}</td><td>${avgW}</td><td>${avgU}</td><td>${'█'.repeat(Math.round(pct/5))}</td></tr>`;
+
+      const aPass = aPgs.length ? Math.round(aPgs.filter(pg=>pg.passed).length/aPgs.length*100) : '-';
+      const sPass = sPgs.length ? Math.round(sPgs.filter(pg=>pg.passed).length/sPgs.length*100) : '-';
+      const aAvg = aPgs.length ? Math.round(aPgs.reduce((s,pg)=>s+pg.score,0)/aPgs.length) : '-';
+      const sAvg = sPgs.length ? Math.round(sPgs.reduce((s,pg)=>s+pg.score,0)/sPgs.length) : '-';
+      const target = (aPgs[0] || sPgs[0]).target;
+
+      const aCls = aPass === '-' ? '' : aPass >= 80 ? 'pass' : aPass >= 40 ? 'warn' : 'fail';
+      const sCls = sPass === '-' ? '' : sPass >= 80 ? 'pass' : sPass >= 40 ? 'warn' : 'fail';
+
+      tableHTML += `<tr>
+        <td>F${f} ${pName}</td>
+        <td class="${aCls}">${aPass === '-' ? '-' : aPass+'%'}</td>
+        <td style="color:#9a8a72;">${aAvg === '-' ? '' : aAvg.toLocaleString()}</td>
+        <td class="${sCls}">${sPass === '-' ? '-' : sPass+'%'}</td>
+        <td style="color:#9a8a72;">${sAvg === '-' ? '' : sAvg.toLocaleString()}</td>
+        <td style="color:#9a8a72;">${target.toLocaleString()}</td>
+      </tr>`;
     }
   }
   tableHTML += '</table>';
   d.innerHTML += tableHTML;
 
-  // Per-run waterfall
-  let runHTML = '<h2>Run Results</h2>';
-  const maxFloor = NUM_FLOORS;
+  // ── Per-run waterfall (side by side) ──
+  let runHTML = '<div class="grid grid-2"><div>';
+  runHTML += '<h2><span class="profile-tag profile-avg">Average</span> Runs</h2>';
   for (let i = 0; i < N; i++) {
-    const r = results[i];
-    const pct = Math.round(r.floorsCleared / maxFloor * 100);
+    const r = avgResults[i];
+    const pct = Math.round(r.floorsCleared / NUM_FLOORS * 100);
     const color = r.victory ? '#ffd700' : `hsl(${r.floorsCleared * 15}, 60%, 45%)`;
-    const status = r.victory ? '<span class="victory">VICTORY</span>' : `<span class="death">${r.diedAt}</span>`;
+    const status = r.victory ? '<span class="victory">WIN</span>' : `<span class="death">${r.diedAt}</span>`;
     const charms = r.charms.map(c => c.name).join(', ');
-    runHTML += `<div class="run-row">
-      <div class="run-num">${i+1}</div>
-      <div class="run-bar" style="width:${pct}%;background:${color};"></div>
-      <div class="run-result">${status}</div>
-      <div class="run-charms" title="${charms}">${charms}</div>
-    </div>`;
+    runHTML += `<div class="run-row"><div class="run-num">${i+1}</div><div class="run-bar" style="width:${pct}%;background:${color};"></div><div class="run-result">${status}</div><div class="run-charms" title="${charms}">${charms}</div></div>`;
   }
+  runHTML += '</div><div>';
+  runHTML += '<h2><span class="profile-tag profile-smart">Smart</span> Runs</h2>';
+  for (let i = 0; i < N; i++) {
+    const r = smartResults[i];
+    const pct = Math.round(r.floorsCleared / NUM_FLOORS * 100);
+    const color = r.victory ? '#ffd700' : `hsl(${r.floorsCleared * 15}, 60%, 45%)`;
+    const status = r.victory ? '<span class="victory">WIN</span>' : `<span class="death">${r.diedAt}</span>`;
+    const charms = r.charms.map(c => c.name).join(', ');
+    runHTML += `<div class="run-row"><div class="run-num">${i+1}</div><div class="run-bar" style="width:${pct}%;background:${color};"></div><div class="run-result">${status}</div><div class="run-charms" title="${charms}">${charms}</div></div>`;
+  }
+  runHTML += '</div></div>';
   d.innerHTML += runHTML;
 
-  // Charm popularity
+  // ── Word length distribution (side by side) ──
+  let wordHTML = '<div class="grid grid-2"><div class="card">';
+  wordHTML += '<h3><span class="profile-tag profile-avg">Average</span> Word Lengths</h3>';
+  const aLenDist = {}, sLenDist = {};
+  let aScores = [], sScores = [];
+  for (const r of avgResults) for (const w of r.allWords) { aLenDist[w.len] = (aLenDist[w.len]||0)+1; aScores.push(w.score); }
+  for (const r of smartResults) for (const w of r.allWords) { sLenDist[w.len] = (sLenDist[w.len]||0)+1; sScores.push(w.score); }
+  aScores.sort((a,b)=>a-b); sScores.sort((a,b)=>a-b);
+  const aTotalW = aScores.length, sTotalW = sScores.length;
+
+  const allLens = new Set([...Object.keys(aLenDist), ...Object.keys(sLenDist)]);
+  const maxLenCount = Math.max(...Object.values(aLenDist), 1);
+  const colors = ['','','','amber','blue','green','purple','gold'];
+  for (const len of [...allLens].sort()) {
+    const count = aLenDist[len]||0;
+    const pct = Math.round(count / maxLenCount * 100);
+    wordHTML += `<div class="bar-row"><div class="bar-label">${len} letters</div><div class="bar-container"><div class="bar-fill ${colors[len]||'amber'}" style="width:${pct}%"></div></div><div class="bar-value">${count} (${Math.round(count/aTotalW*100)}%)</div></div>`;
+  }
+  if (aTotalW) wordHTML += `<div style="margin-top:8px;font-size:11px;color:#9a8a72;">Median: ${aScores[Math.floor(aTotalW/2)]} | p90: ${aScores[Math.floor(aTotalW*0.9)]} | Max: ${aScores[aTotalW-1]}</div>`;
+
+  wordHTML += '</div><div class="card">';
+  wordHTML += '<h3><span class="profile-tag profile-smart">Smart</span> Word Lengths</h3>';
+  const maxLenCount2 = Math.max(...Object.values(sLenDist), 1);
+  for (const len of [...allLens].sort()) {
+    const count = sLenDist[len]||0;
+    const pct = Math.round(count / maxLenCount2 * 100);
+    wordHTML += `<div class="bar-row"><div class="bar-label">${len} letters</div><div class="bar-container"><div class="bar-fill ${colors[len]||'amber'}" style="width:${pct}%"></div></div><div class="bar-value">${count} (${sTotalW ? Math.round(count/sTotalW*100) : 0}%)</div></div>`;
+  }
+  if (sTotalW) wordHTML += `<div style="margin-top:8px;font-size:11px;color:#9a8a72;">Median: ${sScores[Math.floor(sTotalW/2)]} | p90: ${sScores[Math.floor(sTotalW*0.9)]} | Max: ${sScores[sTotalW-1]}</div>`;
+  wordHTML += '</div></div>';
+  d.innerHTML += wordHTML;
+
+  // ── Charm popularity (combined) ──
   const charmCounts = {};
-  for (const r of results) for (const c of r.charms) {
+  for (const r of [...avgResults, ...smartResults]) for (const c of r.charms) {
     const key = `${c.name}|${c.rarity}`;
     charmCounts[key] = (charmCounts[key]||0)+1;
   }
   const sorted = Object.entries(charmCounts).sort((a,b)=>b[1]-a[1]);
   const maxCount = sorted[0]?.[1] || 1;
-  let charmHTML = '<h2>Charm Popularity</h2>';
+  let charmHTML = '<h2>Charm Popularity (both profiles)</h2>';
   for (const [key, count] of sorted.slice(0, 20)) {
     const [name, rarity] = key.split('|');
     const pct = Math.round(count / maxCount * 100);
-    charmHTML += `<div class="charm-bar rarity-${rarity}">
-      <div class="charm-count">${count}x</div>
-      <div class="charm-name">${name}</div>
-      <div class="charm-meter"><div class="charm-fill" style="width:${pct}%"></div></div>
-    </div>`;
+    charmHTML += `<div class="charm-bar rarity-${rarity}"><div class="charm-count">${count}x</div><div class="charm-name">${name}</div><div class="charm-meter"><div class="charm-fill" style="width:${pct}%"></div></div></div>`;
   }
   d.innerHTML += charmHTML;
 
-  // Word length distribution
-  const lenDist = {};
-  let allScores = [];
-  for (const r of results) for (const w of r.allWords) {
-    lenDist[w.len] = (lenDist[w.len]||0)+1;
-    allScores.push(w.score);
-  }
-  allScores.sort((a,b)=>a-b);
-  const totalW = allScores.length;
-  const maxLen = Math.max(...Object.values(lenDist));
-  let wordHTML = '<h2>Word Stats</h2><div class="grid grid-2"><div class="card"><h3>Length Distribution</h3>';
-  for (const [len, count] of Object.entries(lenDist).sort((a,b)=>a[0]-b[0])) {
-    const pct = Math.round(count / maxLen * 100);
-    const colors = ['','','','amber','blue','green','purple','gold'];
-    wordHTML += `<div class="bar-row">
-      <div class="bar-label">${len} letters</div>
-      <div class="bar-container"><div class="bar-fill ${colors[len]||'amber'}" style="width:${pct}%"></div></div>
-      <div class="bar-value">${count} (${Math.round(count/totalW*100)}%)</div>
-    </div>`;
-  }
-  wordHTML += '</div><div class="card"><h3>Score Distribution</h3>';
-  // Histogram buckets
-  const buckets = [0, 100, 250, 500, 1000, 2000, 4000, 8000, Infinity];
-  const bucketLabels = ['0-100', '100-250', '250-500', '500-1k', '1k-2k', '2k-4k', '4k-8k', '8k+'];
-  const bucketCounts = new Array(buckets.length - 1).fill(0);
-  for (const s of allScores) {
-    for (let b = 0; b < buckets.length - 1; b++) {
-      if (s >= buckets[b] && s < buckets[b+1]) { bucketCounts[b]++; break; }
+  // ── Death heatmap (side by side) ──
+  let deathHTML = '<div class="grid grid-2">';
+  for (const [label, results2, cls] of [['Average', avgResults, 'profile-avg'], ['Smart', smartResults, 'profile-smart']]) {
+    const deaths = {};
+    for (const r of results2) if (r.diedAt) deaths[r.diedAt] = (deaths[r.diedAt]||0)+1;
+    deathHTML += `<div><h2><span class="profile-tag ${cls}">${label}</span> Deaths</h2><div class="card"><div style="display:grid;grid-template-columns:60px repeat(3,1fr);gap:4px;font-size:12px;">`;
+    deathHTML += '<div></div><div style="text-align:center;color:#9a8a72;">Opening</div><div style="text-align:center;color:#9a8a72;">Rising</div><div style="text-align:center;color:#9a8a72;">Final</div>';
+    for (let f = 1; f <= NUM_FLOORS; f++) {
+      deathHTML += `<div style="color:#c8b89a;">Floor ${f}</div>`;
+      for (const p of ['O','R','F']) {
+        const key = `F${f}${p}`;
+        const count = deaths[key] || 0;
+        const intensity = count === 0 ? 0 : Math.min(1, count / 10);
+        const bg = count === 0 ? '#2a2118' : `rgba(196, 64, 64, ${0.2 + intensity * 0.6})`;
+        deathHTML += `<div style="text-align:center;padding:6px;border-radius:4px;background:${bg};color:${count?'#e8dcc8':'#5a4a3a'}">${count || '·'}</div>`;
+      }
     }
+    deathHTML += '</div></div></div>';
   }
-  const maxBucket = Math.max(...bucketCounts);
-  for (let b = 0; b < bucketCounts.length; b++) {
-    const pct = Math.round(bucketCounts[b] / maxBucket * 100);
-    wordHTML += `<div class="bar-row">
-      <div class="bar-label">${bucketLabels[b]}</div>
-      <div class="bar-container"><div class="bar-fill amber" style="width:${pct}%"></div></div>
-      <div class="bar-value">${bucketCounts[b]}</div>
-    </div>`;
-  }
-  wordHTML += `<div style="margin-top:8px;font-size:11px;color:#9a8a72;">Median: ${allScores[Math.floor(totalW/2)]} | p90: ${allScores[Math.floor(totalW*0.9)]} | Max: ${allScores[totalW-1]}</div>`;
-  wordHTML += '</div></div>';
-  d.innerHTML += wordHTML;
-
-  // Death heatmap
-  const deaths = {};
-  for (const r of results) if (r.diedAt) deaths[r.diedAt] = (deaths[r.diedAt]||0)+1;
-  let deathHTML = '<h2>Death Heatmap</h2><div class="card"><div style="display:grid;grid-template-columns:60px repeat(3,1fr);gap:4px;font-size:12px;">';
-  deathHTML += '<div></div><div style="text-align:center;color:#9a8a72;">Opening</div><div style="text-align:center;color:#9a8a72;">Rising</div><div style="text-align:center;color:#9a8a72;">Final</div>';
-  for (let f = 1; f <= NUM_FLOORS; f++) {
-    deathHTML += `<div style="color:#c8b89a;">Floor ${f}</div>`;
-    for (const p of ['O','R','F']) {
-      const key = `F${f}${p}`;
-      const count = deaths[key] || 0;
-      const intensity = count === 0 ? 0 : Math.min(1, count / 10);
-      const bg = count === 0 ? '#2a2118' : `rgba(196, 64, 64, ${0.2 + intensity * 0.6})`;
-      deathHTML += `<div style="text-align:center;padding:6px;border-radius:4px;background:${bg};color:${count?'#e8dcc8':'#5a4a3a'}">${count || '·'}</div>`;
-    }
-  }
-  deathHTML += '</div></div>';
+  deathHTML += '</div>';
   d.innerHTML += deathHTML;
 }
 
