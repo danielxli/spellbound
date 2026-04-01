@@ -57,9 +57,19 @@ async function init() {
 
   document.addEventListener('keydown', handleKeydown);
 
-  // Register service worker for PWA/offline
+  // Register service worker for PWA/offline — auto-update on new version
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js').catch(() => {});
+    navigator.serviceWorker.register('sw.js').then(reg => {
+      reg.addEventListener('updatefound', () => {
+        const newSW = reg.installing;
+        newSW.addEventListener('statechange', () => {
+          if (newSW.state === 'activated') {
+            // New SW active — reload to get fresh assets
+            window.location.reload();
+          }
+        });
+      });
+    }).catch(() => {});
   }
 }
 
