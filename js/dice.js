@@ -149,8 +149,94 @@ const DIE_ENCHANTMENTS = {
   }
 };
 
+// Create a fixed-letter die for the shop (always rolls the same letter)
+function createFixedDie(letter, bonusChips, bonusMult) {
+  const face = letter === 'QU' ? 'Q' : letter;
+  return {
+    faces: [face, face, face, face, face, face],
+    type: 'fixed',
+    fixedLetter: letter,
+    bonusChips: bonusChips || 0,
+    bonusMult: bonusMult || 0,
+    bonusGold: 0
+  };
+}
+
+// Generate a random shop die scaled by floor
+function generateShopDie(floor) {
+  const allLetters = Object.keys(LETTER_CHIPS).filter(l => l !== 'Q');
+  const letter = allLetters[Math.floor(Math.random() * allLetters.length)];
+
+  // Scale bonuses with floor progression
+  const roll = Math.random();
+  let bonusChips = 0, bonusMult = 0;
+
+  if (roll < 0.4) {
+    // Chips only
+    bonusChips = 5 + Math.floor(floor * 2) + Math.floor(Math.random() * 5);
+  } else if (roll < 0.7) {
+    // Mult only
+    bonusMult = 2 + Math.floor(floor * 0.5) + Math.floor(Math.random() * 2);
+  } else {
+    // Both
+    bonusChips = 3 + Math.floor(floor * 1.5);
+    bonusMult = 1 + Math.floor(floor * 0.4);
+  }
+
+  const die = createFixedDie(letter, bonusChips, bonusMult);
+
+  // Price based on total bonus value
+  const cost = Math.floor(bonusChips * 0.5 + bonusMult * 3 + 3);
+  const displayLetter = letter === 'QU' ? 'Qu' : letter;
+  const tier = LETTER_TIERS[letter] || 'common';
+  const baseChips = LETTER_CHIPS[letter] || 2;
+
+  return {
+    die,
+    letter,
+    displayLetter,
+    tier,
+    baseChips,
+    bonusChips,
+    bonusMult,
+    totalChips: baseChips + bonusChips,
+    cost,
+    name: `${displayLetter} Die`,
+    desc: buildDieDesc(displayLetter, baseChips, bonusChips, bonusMult),
+    flavor: getDieFlavor(bonusChips, bonusMult)
+  };
+}
+
+function buildDieDesc(letter, baseChips, bonusChips, bonusMult) {
+  const parts = [];
+  parts.push(`Fixed ${letter} — always rolls this letter`);
+  if (bonusChips > 0) parts.push(`+${bonusChips} chips (${baseChips} base → ${baseChips + bonusChips} total)`);
+  if (bonusMult > 0) parts.push(`+${bonusMult} mult per word`);
+  return parts.join('. ') + '.';
+}
+
+function getDieFlavor(bonusChips, bonusMult) {
+  if (bonusChips > 0 && bonusMult > 0) return 'A prismatic die that gleams with possibility.';
+  if (bonusMult > 0) return 'This die hums with amplifying resonance.';
+  return 'Ink pools deep in every groove of this die.';
+}
+
+// Get visual class for a die based on its bonuses
+function getDieVisualClass(die) {
+  if (die.type === 'standard') return '';
+  const hasChips = (die.bonusChips || 0) > 0;
+  const hasMult = (die.bonusMult || 0) > 0;
+  if (hasChips && hasMult) return 'die-holo';
+  if (hasMult) return 'die-mult';
+  if (hasChips) return 'die-chips';
+  // Enchanted dice keep their type class
+  if (die.type !== 'fixed') return 'die-' + die.type;
+  return '';
+}
+
 window.GameDice = {
   STANDARD_DICE, LETTER_TIERS, LETTER_CHIPS, LENGTH_MULT,
   getWordLengthMult, createStandardBag, rollDie, dealGrid,
-  rerollCells, shakeGrid, areAdjacent, DIE_ENCHANTMENTS
+  rerollCells, shakeGrid, areAdjacent, DIE_ENCHANTMENTS,
+  createFixedDie, generateShopDie, getDieVisualClass
 };

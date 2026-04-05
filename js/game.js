@@ -720,35 +720,16 @@ function generateShopItems(state) {
     cost: upgradeCost
   });
 
-  // ── 1 Letter upgrade (+1 chip to a specific letter, uncapped) ──
-  const LETTER_CHIPS = GameDice.LETTER_CHIPS;
-  const allLetters = Object.keys(LETTER_CHIPS).filter(l => l !== 'Q'); // QU is the usable form
-  const targetLetter = allLetters[Math.floor(Math.random() * allLetters.length)];
-  const currentLetterBonus = state.letterBonuses[targetLetter] || 0;
-  const letterUpgradeCost = 3 + currentLetterBonus * 2; // scales with level
-  const displayLetter = targetLetter === 'QU' ? 'Qu' : targetLetter;
-  const baseCh = LETTER_CHIPS[targetLetter] || 2;
-  items.push({
-    type: 'letter_upgrade',
-    data: {
-      letter: targetLetter,
-      name: `Inscribe: ${displayLetter}`,
-      flavor: 'The letter glows brighter on every die.',
-      currentBonus: currentLetterBonus,
-      newBonus: currentLetterBonus + 1,
-      baseChips: baseCh
-    },
-    cost: letterUpgradeCost
-  });
-
-  // ── 1 Die enchantment (transform an existing die) ──
-  const enchantTypes = Object.values(GameDice.DIE_ENCHANTMENTS);
-  const enchant = enchantTypes[Math.floor(Math.random() * enchantTypes.length)];
-  items.push({
-    type: 'die_enchant',
-    data: enchant,
-    cost: enchant.cost
-  });
+  // ── 2-3 Shop dice (fixed-letter dice with bonuses) ──
+  const diceCount = 2 + (Math.random() < 0.4 ? 1 : 0);
+  for (let i = 0; i < diceCount; i++) {
+    const shopDie = GameDice.generateShopDie(state.floor);
+    items.push({
+      type: 'shop_die',
+      data: shopDie,
+      cost: shopDie.cost
+    });
+  }
 
   // ── 1 Ink card ──
   const inkCards = [
@@ -814,6 +795,10 @@ function buyShopItem(state, item) {
       return { success: true, msg: `${dl} now has +${state.letterBonuses[letter]} bonus chips!` };
     }
 
+    case 'shop_die':
+      // Requires picking a die to replace — returns signal for UI
+      return { success: true, msg: 'pick_die_replace', pickDieReplace: true, shopDie: item.data };
+
     case 'die_enchant':
       // Requires picking a die — returns signal for UI to handle
       return { success: true, msg: 'pick_die', pickDie: true, enchant: item.data };
@@ -834,6 +819,20 @@ function enchantDie(state, dieIndex, enchant) {
   return true;
 }
 
+
+// Replace a die in the bag with a new shop die
+function replaceDie(state, dieIndex, shopDie) {
+  if (dieIndex < 0 || dieIndex >= state.diceBag.length) return false;
+  state.diceBag[dieIndex] = {
+    faces: [...shopDie.die.faces],
+    type: shopDie.die.type,
+    fixedLetter: shopDie.die.fixedLetter,
+    bonusChips: shopDie.die.bonusChips || 0,
+    bonusMult: shopDie.die.bonusMult || 0,
+    bonusGold: shopDie.die.bonusGold || 0
+  };
+  return true;
+}
 
 // Sell a charm — get half its cost back (rounded up), free the slot
 function sellCharm(state, charmIndex) {
@@ -870,7 +869,7 @@ window.Game = {
   FLOORS, PAGE_NAMES, PAGE_GOLD, STORY_TWISTS, ALL_CHARMS, NARRATOR, CHARACTERS,
   createGameState, getTarget, getFloorInfo, startRound, submitWord,
   endRound, advancePage, generateShopItems, buyShopItem,
-  enchantDie, sellCharm,
+  enchantDie, replaceDie, sellCharm,
   useInkCard, scoreWord, detectPatterns, hasDoubleLetter, hasConsonantRun,
   isBookend, isVowelHeavy, isAllUnique
 };

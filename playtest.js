@@ -181,7 +181,7 @@ function simShop(state, profile) {
   if (profile.shopPrioritize) {
     const ro = { legendary:0, rare:1, uncommon:2, common:3 };
     items.sort((a,b) => {
-      const to = { charm:0, letter_upgrade:1, length_upgrade:2, die_enchant:3, ink_card:4 };
+      const to = { charm:0, shop_die:1, letter_upgrade:2, length_upgrade:3, die_enchant:4, ink_card:5 };
       const ta=to[a.type]??9, tb=to[b.type]??9;
       if(ta!==tb) return ta-tb;
       if(a.type==='charm'&&b.type==='charm') return (ro[a.data.rarity]??9)-(ro[b.data.rarity]??9);
@@ -222,8 +222,13 @@ function simShop(state, profile) {
       else if (item.type === 'length_upgrade') bought.push({ type: 'word_up', name: `${item.data.length}L +mult`, cost: item.cost });
       else if (item.type === 'letter_upgrade') bought.push({ type: 'letter_up', name: `${item.data.letter} +1c`, cost: item.cost });
       else if (item.type === 'die_enchant') bought.push({ type: 'enchant', name: item.data.name, cost: item.cost });
+      else if (item.type === 'shop_die') bought.push({ type: 'die', name: item.data.name, cost: item.cost });
       else if (item.type === 'ink_card') bought.push({ type: 'ink', name: item.data.name, cost: item.cost });
       else bought.push({ type: item.type, name: '?', cost: item.cost });
+      if (r.pickDieReplace && r.shopDie) {
+        // AI replaces the weakest standard die
+        for (let i = 0; i < 16; i++) { if (state.diceBag[i] && state.diceBag[i].type === 'standard') { Game.replaceDie(state, i, r.shopDie); break; } }
+      }
       if (r.pickDie && r.enchant) {
         for (let i = 0; i < 16; i++) { if (state.diceBag[i] && state.diceBag[i].type === 'standard') { Game.enchantDie(state, i, r.enchant); break; } }
       }

@@ -229,7 +229,7 @@ function render() {
   shopScreen.style.display = 'none';
 
   // Clear overlays & intros
-  document.querySelectorAll('.overlay, .gold-reward-overlay, .floor-intro, .twist-reveal, .page-turn').forEach(el => el.remove());
+  document.querySelectorAll('.overlay, .gold-reward-overlay, .floor-intro, .page-select, .twist-reveal, .page-turn').forEach(el => el.remove());
 
   switch (state.phase) {
     case 'title':
@@ -266,13 +266,15 @@ function startGame() {
   state.maxSubmissions = char.submissions;
   GameAudio.ensureContext();
   showFloorIntro(() => {
-    state.phase = 'playing';
-    Game.startRound(state);
-    render();
-    animateGridEntrance();
-    GameAudio.playDeal();
-    startTimerIfNeeded();
-    Storage.saveRun(state);
+    showPageSelect(() => {
+      state.phase = 'playing';
+      Game.startRound(state);
+      render();
+      animateGridEntrance();
+      GameAudio.playDeal();
+      startTimerIfNeeded();
+      Storage.saveRun(state);
+    });
   });
 }
 
@@ -296,6 +298,59 @@ function showFloorIntro(onContinue) {
   document.getElementById('app').appendChild(div);
 
   document.getElementById('floor-intro-btn').addEventListener('click', () => {
+    GameAudio.playTransition();
+    div.classList.add('floor-intro-exit');
+    setTimeout(() => {
+      div.remove();
+      onContinue();
+    }, 450);
+  });
+}
+
+// ── Pre-Page Screen (Balatro blind-select style) ──
+function showPageSelect(onContinue) {
+  const floor = Game.FLOORS[state.floor];
+  const pageNames = ['Opening Page', 'Rising Page', 'Final Page'];
+  const targets = [floor.opening, floor.rising, floor.final];
+
+  const div = document.createElement('div');
+  div.className = 'page-select';
+  div.id = 'page-select';
+
+  let pagesHTML = '';
+  for (let i = 0; i < 3; i++) {
+    const isCleared = i < state.page;
+    const isCurrent = i === state.page;
+    const isFuture = i > state.page;
+    const statusClass = isCleared ? 'cleared' : isCurrent ? 'current' : 'future';
+    const statusLabel = isCleared ? 'Defeated' : isCurrent ? 'Next' : '';
+
+    pagesHTML += `
+      <div class="page-select-card ${statusClass}">
+        ${statusLabel ? `<div class="page-select-status">${statusLabel}</div>` : '<div class="page-select-status empty"></div>'}
+        <div class="page-select-name">${pageNames[i]}</div>
+        <div class="page-select-target">
+          ${isCleared ? '<span class="page-check">&#10003;</span>' : `Score at least<br><span class="page-target-num">${targets[i].toLocaleString()}</span>`}
+        </div>
+      </div>
+    `;
+  }
+
+  div.innerHTML = `
+    <div class="page-select-header">
+      <div class="page-select-floor">Floor ${floor.num} — "${floor.name}"</div>
+      <div class="page-select-genre">${floor.genre}</div>
+    </div>
+    <div class="page-select-cards">
+      ${pagesHTML}
+    </div>
+    <div class="page-select-narrative">${floor.intro}</div>
+    <button class="btn btn-gold" id="page-select-btn">Begin Writing</button>
+  `;
+
+  document.getElementById('app').appendChild(div);
+
+  document.getElementById('page-select-btn').addEventListener('click', () => {
     GameAudio.playTransition();
     div.classList.add('floor-intro-exit');
     setTimeout(() => {
@@ -524,7 +579,10 @@ function renderGrid() {
       div.className = 'die-cell';
       if (isSelected) div.classList.add('selected');
       if (isAdjacentToLast) div.classList.add('adjacent-hint');
-      if (cell.die.type !== 'standard') div.classList.add('die-' + cell.die.type);
+
+      // Apply visual class based on die bonuses
+      const dieVisual = GameDice.getDieVisualClass(cell.die);
+      if (dieVisual) div.classList.add(dieVisual);
 
       // Apply rerolling animation to cells that just changed
       if (rerolledPositions.has(key)) {
@@ -534,16 +592,16 @@ function renderGrid() {
 
       const tier = LETTER_TIERS[cell.letter] || 'common';
       const chips = LETTER_CHIPS[cell.letter] || 2;
-      const totalChips = chips + (cell.die.bonusChips || 0);
+      const letterBonus = state.letterBonuses[cell.letter] || 0;
+      const totalChips = chips + (cell.die.bonusChips || 0) + letterBonus;
       const displayLetter = cell.isWild ? '★' : (cell.letter === 'QU' ? 'Qu' : cell.letter);
       const isQu = cell.letter === 'QU';
-      const isUpgraded = (cell.die.bonusChips || 0) > 0;
-
-      if (isUpgraded) div.classList.add('die-upgraded');
+      const dieMult = cell.die.bonusMult || 0;
 
       div.innerHTML = `
         <span class="die-letter tier-${tier}${isQu ? ' die-qu' : ''}">${displayLetter}</span>
         <span class="die-chips">${totalChips}</span>
+        ${dieMult > 0 ? `<span class="die-mult-badge">+${dieMult}m</span>` : ''}
         ${isSelected ? `<span class="selection-order">${selIndex + 1}</span>` : ''}
       `;
 
@@ -866,7 +924,7 @@ function doSubmitWord() {
   });
 }
 
-// ── Step-by-step scoring animation (Balatro-style) ──
+// ── Step-by-step scoring animation (Balatro-style, improved tick-up) ──
 function runScoringAnimation(result) {
   return new Promise(resolve => {
     const overlay = document.createElement('div');
@@ -876,6 +934,9 @@ function runScoringAnimation(result) {
     const hasCharms = result.charmTriggers.length > 0;
     const hasPatterns = result.patterns.length > 0;
 
+    // Check if any letters have die mult bonuses
+    const dieMults = letters.filter(l => l.dieMult > 0);
+
     overlay.innerHTML = `
       <div class="scoring-card">
         <div class="scoring-letters">
@@ -883,6 +944,7 @@ function runScoringAnimation(result) {
             <div class="scoring-tile" id="stile-${i}">
               <div class="tile-letter tier-${l.tier}">${l.letter}</div>
               <div class="tile-chips" id="schip-${i}">+${l.chips}</div>
+              ${l.dieMult > 0 ? `<div class="tile-mult" id="smult-die-${i}">+${l.dieMult} mult</div>` : ''}
             </div>
           `).join('')}
         </div>
@@ -899,43 +961,68 @@ function runScoringAnimation(result) {
         <div class="scoring-patterns" id="spatterns">
           ${result.patterns.map(p => `<span class="pattern-badge">${p}</span>`).join('')}
         </div>
-        <div class="scoring-final" id="sfinal">+${result.score}</div>
+        <div class="scoring-final" id="sfinal"></div>
       </div>
     `;
 
     document.getElementById('app').appendChild(overlay);
 
     // Animation timeline
-    const LETTER_DELAY = animDelay(120); // ms between each letter
-    const CHARM_DELAY = animDelay(300);  // ms between each charm
-    let t = animDelay(200); // start delay
+    const LETTER_DELAY = animDelay(140); // slightly slower for readability
+    const CHARM_DELAY = animDelay(350);  // slower for charm triggers
+    let t = animDelay(250); // start delay
 
     let runningChips = 0;
+    let runningMult = result.baseMult;
+    let runningMultMult = 1;
     const multEl = () => document.getElementById('smult-total');
     const chipsEl = () => document.getElementById('schips-total');
 
-    // Step 1: Reveal letters one by one, accumulating chips
+    // Helper to bump an element
+    function bumpEl(el) {
+      if (!el) return;
+      el.classList.remove('bump');
+      void el.offsetWidth;
+      el.classList.add('bump');
+    }
+
+    // Step 1: Reveal letters one by one, accumulating chips + die mult
     letters.forEach((l, i) => {
       setTimeout(() => {
         const tile = document.getElementById(`stile-${i}`);
         const chip = document.getElementById(`schip-${i}`);
         if (tile) tile.classList.add('revealed');
+
         setTimeout(() => {
+          // Show chip value flying up
           if (chip) chip.classList.add('shown');
           runningChips += l.chips;
           GameAudio.playChipCount(600 + i * 80);
           const cel = chipsEl();
           if (cel) {
             cel.textContent = runningChips;
-            cel.classList.remove('bump');
-            void cel.offsetWidth; // force reflow
-            cel.classList.add('bump');
+            bumpEl(cel);
           }
-        }, 100);
+
+          // If die has mult bonus, show it after a beat
+          if (l.dieMult > 0) {
+            setTimeout(() => {
+              const multBadge = document.getElementById(`smult-die-${i}`);
+              if (multBadge) multBadge.classList.add('shown');
+              runningMult += l.dieMult;
+              const mel = multEl();
+              if (mel) {
+                mel.textContent = formatMult(runningMult * runningMultMult);
+                bumpEl(mel);
+              }
+              GameAudio.playCharm();
+            }, animDelay(80));
+          }
+        }, animDelay(80));
       }, t + i * LETTER_DELAY);
     });
 
-    t += letters.length * LETTER_DELAY + 200;
+    t += letters.length * LETTER_DELAY + animDelay(250);
 
     // Step 2: Show length mult
     setTimeout(() => {
@@ -943,19 +1030,15 @@ function runScoringAnimation(result) {
       if (el) el.classList.add('shown');
     }, t);
 
-    t += 300;
+    t += animDelay(350);
 
     // Step 3: Show charm triggers one by one, updating totals
-    let currentBonusChips = 0;
-    let currentBonusMult = 0;
-    let currentMultMult = 1;
-
     result.charmTriggers.forEach((charm, i) => {
       setTimeout(() => {
         const charmsDiv = document.getElementById('scharms');
         if (!charmsDiv) return;
 
-        // Build effect text
+        // Build effect badges
         const effects = [];
         if (charm.chipDelta > 0) effects.push(`<span class="charm-entry-effect chips-effect">+${charm.chipDelta} chips</span>`);
         if (charm.chipDelta < 0) effects.push(`<span class="charm-entry-effect chips-effect">${charm.chipDelta} chips</span>`);
@@ -967,7 +1050,7 @@ function runScoringAnimation(result) {
         entry.className = 'scoring-charm-entry';
         entry.innerHTML = `
           <span class="charm-entry-name">${charm.name}</span>
-          <span>${effects.join(' ')}</span>
+          <span class="charm-effects-row">${effects.join(' ')}</span>
         `;
         charmsDiv.appendChild(entry);
 
@@ -975,31 +1058,37 @@ function runScoringAnimation(result) {
         requestAnimationFrame(() => entry.classList.add('shown'));
         GameAudio.playCharm();
 
-        // Update running totals
-        currentBonusChips += charm.chipDelta;
-        currentBonusMult += charm.multDelta;
-        if (charm.multMultDelta > 0) currentMultMult *= charm.multMultDelta;
+        // After entry appears, tick up the relevant counter
+        setTimeout(() => {
+          // Update chips total
+          if (charm.chipDelta !== 0) {
+            runningChips += charm.chipDelta;
+            const cel = chipsEl();
+            if (cel) {
+              cel.textContent = Math.max(0, runningChips);
+              bumpEl(cel);
+            }
+          }
 
-        const cel = chipsEl();
-        if (cel && charm.chipDelta !== 0) {
-          cel.textContent = result.baseChips + currentBonusChips;
-          cel.classList.remove('bump');
-          void cel.offsetWidth;
-          cel.classList.add('bump');
-        }
-
-        const mel = multEl();
-        if (mel && (charm.multDelta !== 0 || charm.multMultDelta > 0)) {
-          const currentMult = (result.baseMult + currentBonusMult) * currentMultMult;
-          mel.textContent = currentMult % 1 === 0 ? currentMult : currentMult.toFixed(1);
-          mel.classList.remove('bump');
-          void mel.offsetWidth;
-          mel.classList.add('bump');
-        }
+          // Update mult total
+          if (charm.multDelta > 0) {
+            runningMult += charm.multDelta;
+          }
+          if (charm.multMultDelta > 0) {
+            runningMultMult *= charm.multMultDelta;
+          }
+          if (charm.multDelta !== 0 || charm.multMultDelta > 0) {
+            const mel = multEl();
+            if (mel) {
+              mel.textContent = formatMult(runningMult * runningMultMult);
+              bumpEl(mel);
+            }
+          }
+        }, animDelay(150));
       }, t + i * CHARM_DELAY);
     });
 
-    t += result.charmTriggers.length * CHARM_DELAY + 200;
+    t += result.charmTriggers.length * CHARM_DELAY + animDelay(250);
 
     // Step 4: Show patterns
     if (hasPatterns) {
@@ -1007,20 +1096,24 @@ function runScoringAnimation(result) {
         const el = document.getElementById('spatterns');
         if (el) el.classList.add('shown');
       }, t);
-      t += 200;
+      t += animDelay(200);
     }
 
-    // Step 5: Final score slam
+    // Step 5: Final score slam — show chips × mult = score
     setTimeout(() => {
       const el = document.getElementById('sfinal');
-      if (el) el.classList.add('shown');
+      if (el) {
+        el.innerHTML = `<span class="final-chips">${result.totalChips}</span> <span class="final-x">×</span> <span class="final-mult">${formatMult(result.totalMult)}</span> <span class="final-eq">=</span> <span class="final-score">+${result.score}</span>`;
+        el.classList.add('shown');
+      }
       GameAudio.playScoreSlam();
     }, t);
 
-    t += 400;
+    t += animDelay(500);
 
-    // Step 6: Dismiss
-    const totalDuration = t + 500;
+    // Step 6: Auto-dismiss (longer for big scores)
+    const dismissDelay = result.score >= 500 ? animDelay(800) : animDelay(500);
+    const totalDuration = t + dismissDelay;
     setTimeout(() => {
       overlay.style.transition = 'opacity 0.3s';
       overlay.style.opacity = '0';
@@ -1033,6 +1126,10 @@ function runScoringAnimation(result) {
       resolve();
     });
   });
+}
+
+function formatMult(val) {
+  return val % 1 === 0 ? val : val.toFixed(1);
 }
 
 function endRoundEarly() {
@@ -1204,7 +1301,7 @@ function proceedFromResult() {
 
 // ── Shop Screen ──
 const SHOP_ICONS = {
-  charm: '✦', letter_upgrade: '✎', die_enchant: '◈', length_upgrade: '↑', ink_card: '🪶', remove_die: '✂'
+  charm: '✦', letter_upgrade: '✎', die_enchant: '◈', length_upgrade: '↑', ink_card: '🪶', remove_die: '✂', shop_die: '⬡'
 };
 
 function renderShop() {
@@ -1262,6 +1359,13 @@ function renderShop() {
         desc = `${item.data.letter === 'QU' ? 'Qu' : item.data.letter}: ${item.data.baseChips}+${item.data.currentBonus} → ${item.data.baseChips}+${item.data.newBonus} chips`;
         flavor = item.data.flavor;
         typeName = 'letter upgrade';
+        break;
+      case 'shop_die':
+        name = item.data.name;
+        desc = item.data.desc;
+        flavor = item.data.flavor;
+        typeName = 'die';
+        icon = `<span class="shop-die-preview tier-${item.data.tier}">${item.data.displayLetter}</span>`;
         break;
     }
 
@@ -1333,6 +1437,12 @@ function buyItem(index) {
 
   const result = Game.buyShopItem(state, item);
   if (result.success) {
+    if (result.pickDieReplace) {
+      item.sold = true;
+      showDieReplacePicker(result.shopDie);
+      renderShop();
+      return;
+    }
     if (result.pickDie) {
       item.sold = true;
       showEnchantPicker(result.enchant);
@@ -1404,15 +1514,77 @@ function showEnchantPicker(enchant) {
   });
 }
 
+// ── Die Replacement Picker: choose which die to swap out ──
+function showDieReplacePicker(shopDie) {
+  const overlay = document.createElement('div');
+  overlay.className = 'overlay';
+  overlay.innerHTML = `
+    <div class="overlay-card" style="max-width: 460px;">
+      <h2>Replace a Die</h2>
+      <div class="die-replace-preview">
+        <span class="die-replace-new tier-${shopDie.tier}">${shopDie.displayLetter}</span>
+        <div class="die-replace-info">
+          <strong>${shopDie.name}</strong>
+          ${shopDie.bonusChips > 0 ? `<span class="chips-effect">+${shopDie.bonusChips} chips</span>` : ''}
+          ${shopDie.bonusMult > 0 ? `<span class="mult-effect">+${shopDie.bonusMult} mult</span>` : ''}
+        </div>
+      </div>
+      <p style="color: var(--cream-dim); font-size: 12px;">Choose a die from your bag to replace:</p>
+      <div id="die-replace-grid" class="die-replace-grid"></div>
+    </div>
+  `;
+  document.getElementById('app').appendChild(overlay);
+
+  const grid = document.getElementById('die-replace-grid');
+  const { LETTER_TIERS, LETTER_CHIPS } = window.GameDice;
+
+  state.diceBag.forEach((die, i) => {
+    const sampleLetter = die.fixedLetter || (die.faces[0] === 'Q' ? 'QU' : die.faces[0]);
+    const tier = LETTER_TIERS[sampleLetter] || 'common';
+    const displayLetter = sampleLetter === 'QU' ? 'Qu' : sampleLetter;
+    const isFixed = die.type === 'fixed';
+    const baseChips = LETTER_CHIPS[sampleLetter] || 2;
+    const totalChips = baseChips + (die.bonusChips || 0);
+    const dieVisual = GameDice.getDieVisualClass(die);
+
+    const div = document.createElement('div');
+    div.className = 'die-replace-cell' + (dieVisual ? ' ' + dieVisual : '');
+
+    let facesLabel;
+    if (isFixed) {
+      facesLabel = `Fixed ${displayLetter}`;
+    } else {
+      facesLabel = die.faces.map(f => f === 'Q' ? 'Qu' : f).join(' ');
+    }
+
+    div.innerHTML = `
+      <span class="die-letter tier-${tier}" style="font-size: 20px;">${isFixed ? displayLetter : die.faces.map(f => f === 'Q' ? 'Qu' : f).join('')}</span>
+      <span class="die-replace-stats">${totalChips}c${(die.bonusMult || 0) > 0 ? ' +' + die.bonusMult + 'm' : ''}</span>
+      <span class="die-replace-type">${die.type === 'standard' ? 'std' : die.type}</span>
+    `;
+
+    div.addEventListener('click', () => {
+      Game.replaceDie(state, i, shopDie);
+      overlay.remove();
+      GameAudio.playGold();
+      showToast(`Replaced die with ${shopDie.name}!`);
+      Storage.saveRun(state);
+      renderShop();
+    });
+
+    grid.appendChild(div);
+  });
+}
+
 function leaveShop() {
   state.phase = 'playing';
 
-  // Check if next page is a Final Page — show twist reveal
-  if (state.page === 2) {
+  const beginRound = () => {
     Game.startRound(state);
     state.wordHistory = [];
 
-    if (state.activeTwist) {
+    // Check if final page has a twist to reveal
+    if (state.page === 2 && state.activeTwist) {
       showTwistReveal(state.activeTwist, () => {
         render();
         animateGridEntrance();
@@ -1427,25 +1599,16 @@ function leaveShop() {
       startTimerIfNeeded();
       Storage.saveRun(state);
     }
-  } else if (state.page === 0) {
-    // New floor — show floor intro
+  };
+
+  if (state.page === 0) {
+    // New floor — show floor intro, then page select
     showFloorIntro(() => {
-      Game.startRound(state);
-      state.wordHistory = [];
-      render();
-      animateGridEntrance();
-      GameAudio.playDeal();
-      startTimerIfNeeded();
-      Storage.saveRun(state);
+      showPageSelect(beginRound);
     });
   } else {
-    Game.startRound(state);
-    state.wordHistory = [];
-    render();
-    animateGridEntrance();
-    GameAudio.playDeal();
-    startTimerIfNeeded();
-    Storage.saveRun(state);
+    // Same floor, next page — show page select
+    showPageSelect(beginRound);
   }
 }
 
