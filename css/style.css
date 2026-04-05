@@ -362,12 +362,13 @@ html, body {
 /* ── Current word display ── */
 .word-display {
   width: 100%;
-  min-height: 52px;
+  height: 52px;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 4px;
-  padding: 8px 12px;
+  padding: 0 12px;
+  overflow: hidden;
   background: linear-gradient(180deg, rgba(58, 47, 36, 0.6), rgba(42, 33, 24, 0.8));
   border-radius: 8px;
   border: 2px solid rgba(212, 160, 74, 0.1);
