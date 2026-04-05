@@ -978,12 +978,15 @@ function runScoringAnimation(result) {
     const multEl = () => document.getElementById('smult-total');
     const chipsEl = () => document.getElementById('schips-total');
 
-    // Helper to bump an element
+    // Helper to bump an element (no forced reflow)
     function bumpEl(el) {
       if (!el) return;
       el.classList.remove('bump');
-      void el.offsetWidth;
-      el.classList.add('bump');
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          el.classList.add('bump');
+        });
+      });
     }
 
     // Step 1: Reveal letters one by one, accumulating chips + die mult

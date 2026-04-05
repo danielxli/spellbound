@@ -966,9 +966,7 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(10, 8, 6, 0.75);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
+  background: rgba(10, 8, 6, 0.85);
   animation: fadeIn 0.2s ease-out;
 }
 
@@ -1001,6 +999,7 @@ html, body {
   gap: 2px;
   opacity: 0;
   transform: translateY(8px);
+  will-change: transform, opacity;
 }
 
 .scoring-tile.revealed {
@@ -1072,13 +1071,13 @@ html, body {
   font-size: 28px;
   font-weight: 700;
   color: var(--amber);
-  transition: all 0.2s;
   min-width: 50px;
   text-align: center;
   background: rgba(212, 160, 74, 0.12);
   border: 1px solid rgba(212, 160, 74, 0.25);
   border-radius: 6px;
   padding: 4px 12px;
+  will-change: transform;
 }
 
 .scoring-chips-total.bump {
@@ -1101,13 +1100,13 @@ html, body {
   font-size: 28px;
   font-weight: 700;
   color: var(--red);
-  transition: all 0.2s;
   min-width: 50px;
   text-align: center;
   background: rgba(196, 64, 64, 0.12);
   border: 1px solid rgba(196, 64, 64, 0.25);
   border-radius: 6px;
   padding: 4px 12px;
+  will-change: transform;
 }
 
 .scoring-mult-total.bump {
