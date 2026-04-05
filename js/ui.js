@@ -1230,8 +1230,8 @@ function showPageResult() {
   document.getElementById('app').appendChild(div);
 
   // Animate the rows stepping in
-  let t = animDelay(200);
-  const step = animDelay(350);
+  let t = animDelay(150);
+  const step = animDelay(200);
 
   setTimeout(() => {
     const el = document.getElementById('gr-title');
@@ -1264,14 +1264,14 @@ function showPageResult() {
     }, t);
   }
 
-  t += step + 100;
+  t += step + 50;
   setTimeout(() => {
     const el = document.getElementById('gr-total');
     if (el) el.classList.add('shown');
     GameAudio.playGold();
   }, t);
 
-  t += 500;
+  t += 300;
   setTimeout(() => {
     const el = document.getElementById('gr-narrate');
     if (el) { el.style.transition = 'opacity 0.5s'; el.style.opacity = '1'; }

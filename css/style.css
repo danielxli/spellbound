@@ -2171,6 +2171,7 @@ html, body {
   font-weight: 700;
   color: var(--amber);
   opacity: 0;
+  will-change: transform, opacity;
 }
 
 .gold-reward-title.shown {
@@ -2186,11 +2187,12 @@ html, body {
   border-radius: 6px;
   font-family: 'Crimson Text', serif;
   font-size: 16px;
+  will-change: transform, opacity;
   opacity: 0;
 }
 
 .gold-reward-row.shown {
-  animation: charmEntryReveal 0.35s ease-out forwards;
+  animation: introFadeUp 0.35s ease-out forwards;
 }
 
 .gold-reward-row .reward-label {
@@ -2212,6 +2214,7 @@ html, body {
   border-top: 2px solid var(--amber-dim);
   margin-top: 4px;
   font-family: 'Crimson Text', serif;
+  will-change: transform, opacity;
   opacity: 0;
 }
 
